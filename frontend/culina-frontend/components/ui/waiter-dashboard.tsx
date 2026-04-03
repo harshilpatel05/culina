@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock } from "lucide-react";
 import { useTheme } from "@/app/theme-provider";
@@ -33,9 +33,15 @@ type WaiterDashboardProps = {
 };
 
 type DraftOrderItem = {
+  dishId: string;
   name: string;
   quantity: string;
   price: string;
+};
+
+type RestaurantTable = {
+  id: string;
+  table_number: number;
 };
 
 type MenuItem = {
@@ -46,9 +52,6 @@ type MenuItem = {
 
 const DEFAULT_SHIFT_HOURS = [3, 34, 28];
 
-const MENU_ITEMS: MenuItem[] = [];
-
-
 
 const statusColorMap: Record<TableStatus, string> = {
   Seated: "border-blue-200/30 bg-blue-500/10 text-blue-300 dark:border-blue-400/30 dark:bg-blue-500/20 dark:text-blue-200",
@@ -57,6 +60,23 @@ const statusColorMap: Record<TableStatus, string> = {
   Served: "border-purple-200/30 bg-purple-500/10 text-purple-300 dark:border-purple-400/30 dark:bg-purple-500/20 dark:text-purple-200",
   "Needs Bill": "border-red-200/30 bg-red-500/10 text-red-300 dark:border-red-400/30 dark:bg-red-500/20 dark:text-red-200",
 };
+
+function mapOrderStatusToTableStatus(orderStatus: OrderStatus | string): TableStatus {
+  switch (orderStatus) {
+    case 'placed':
+      return 'Order Taken';
+    case 'preparing':
+      return 'Dish Ready';
+    case 'served':
+      return 'Served';
+    case 'completed':
+      return 'Needs Bill';
+    case 'cancelled':
+      return 'Order Taken';
+    default:
+      return 'Order Taken';
+  }
+}
 
 export function WaiterDashboard({
   waiterName,
@@ -74,94 +94,132 @@ export function WaiterDashboard({
   const [newOrder, setNewOrder] = useState({ tableNumber: "", guests: "2", notes: "", items: [] as DraftOrderItem[] });
   const [newItem, setNewItem] = useState({ itemName: "", quantity: 1 });
   const [isQtySliderOpen, setIsQtySliderOpen] = useState(false);
+  const [isDishDropdownOpen, setIsDishDropdownOpen] = useState(false);
+  const [isTableDropdownOpen, setIsTableDropdownOpen] = useState(false);
   const [draftQty, setDraftQty] = useState(1);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [isLoadingMenu, setIsLoadingMenu] = useState(true);
+  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [allTables, setAllTables] = useState<RestaurantTable[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
-  // Map order status to table status for UI
-  const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
-    switch (orderStatus) {
-      case 'placed':
-        return 'Order Taken';
-      case 'preparing':
-        return 'Dish Ready';
-      case 'served':
-        return 'Served';
-      case 'completed':
-        return 'Needs Bill';
-      case 'cancelled':
-        return 'Order Taken';
-      default:
-        return 'Order Taken';
-    }
-  };
+  const refreshTablesAndOrders = useCallback(async () => {
+    try {
+      setIsLoadingOrders(true);
+      setOrdersError(null);
 
-  // Fetch tables and orders from API
-  useEffect(() => {
-    const fetchTablesAndOrders = async () => {
-      try {
-        setIsLoadingOrders(true);
-        setOrdersError(null);
-        
-        // Fetch both tables and orders in parallel
-        const [tablesRes, ordersRes] = await Promise.all([
-          fetch('/api/tables'),
-          fetch('/api/orders')
-        ]);
-        
-        if (!tablesRes.ok || !ordersRes.ok) {
-          throw new Error(`Failed to fetch data: tables(${tablesRes.status}), orders(${ordersRes.status})`);
+      const [tablesRes, ordersRes] = await Promise.all([
+        fetch('/api/tables'),
+        fetch('/api/orders')
+      ]);
+
+      if (!tablesRes.ok || !ordersRes.ok) {
+        throw new Error(`Failed to fetch data: tables(${tablesRes.status}), orders(${ordersRes.status})`);
+      }
+
+      const tablesData = await tablesRes.json();
+      const ordersData = await ordersRes.json();
+
+      const tablesList = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
+      const ordersList = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+
+      setAllTables(
+        tablesList.map((table: { id: string; table_number: number }) => ({
+          id: table.id,
+          table_number: table.table_number
+        }))
+      );
+
+      const ordersByTableId: Record<string, { id: string; status: string; num_people: number; total_amount: number; order_items?: Array<{ quantity: number; price: number; dishes?: { name?: string } }> }> = {};
+      ordersList.forEach((order: { id: string; table_id?: string; status: string; num_people?: number; total_amount?: number; order_items?: Array<{ quantity: number; price: number; dishes?: { name?: string } }> }) => {
+        if (!order.table_id) {
+          return;
         }
-        
-        const tablesData = await tablesRes.json();
-        const ordersData = await ordersRes.json();
-        
-        // Extract arrays from responses
-        const tables = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
-        const orders = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
-        
-        // Create a map of orders by table_id for quick lookup
-        const ordersByTableId: Record<string, any> = {};
-        orders.forEach((order: any) => {
-          if (order.table_id) {
-            ordersByTableId[order.table_id] = order;
-          }
-        });
-        
-        // Transform tables to ActiveTable format, including order data if available
-        const transformedTables = tables
-          .map((table: any) => {
-            const order = ordersByTableId[table.id];
-            return {
-              id: table.id,
-              tableNumber: String(table.table_number).padStart(2, '0'),
-              status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
-              guests: order?.num_people || 1,
-              runningTotal: order ? parseFloat(order.total_amount) || 0 : 0,
-              orderItems: order?.order_items && Array.isArray(order.order_items)
-                ? order.order_items.map((item: any, idx: number) => ({
-                    id: `${order.id}-item-${idx}`,
-                    name: item.name || item.dish_name || 'Unknown',
-                    quantity: item.quantity || 1,
-                    price: parseFloat(item.price) || 0,
-                  }))
-                : [],
-            };
-          })
-          .filter((table: any) => table.status !== 'Seated' || table.orderItems.length > 0); // Show only occupied tables or tables with orders
-        
-        setTables(transformedTables);
+
+        if (order.status === 'completed' || order.status === 'cancelled') {
+          return;
+        }
+
+        ordersByTableId[order.table_id] = {
+          id: order.id,
+          status: order.status,
+          num_people: order.num_people ?? 1,
+          total_amount: Number(order.total_amount ?? 0),
+          order_items: order.order_items
+        };
+      });
+
+      const transformedTables = tablesList
+        .map((table: { id: string; table_number: number }) => {
+          const order = ordersByTableId[table.id];
+          return {
+            id: table.id,
+            tableNumber: String(table.table_number).padStart(2, '0'),
+            status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
+            guests: order?.num_people || 1,
+            runningTotal: order?.total_amount || 0,
+            orderItems: order?.order_items && Array.isArray(order.order_items)
+              ? order.order_items.map((item, idx) => ({
+                  id: `${order.id}-item-${idx}`,
+                  name: item.dishes?.name || 'Unknown',
+                  quantity: item.quantity || 1,
+                  price: Number(item.price) || 0,
+                }))
+              : [],
+          };
+        })
+        .filter((table) => table.status !== 'Seated' || table.orderItems.length > 0);
+
+      setTables(transformedTables);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching data';
+      setOrdersError(errorMessage);
+      console.error('Failed to fetch tables and orders:', error);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTablesAndOrders();
+  }, [refreshTablesAndOrders]);
+
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      if (!user?.restaurant_id) {
+        setMenuItems([]);
+        setIsLoadingMenu(false);
+        return;
+      }
+
+      try {
+        setIsLoadingMenu(true);
+        const response = await fetch('/api/dishes?is_active=true');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch dishes (${response.status})`);
+        }
+
+        const data = await response.json();
+        const dishes = Array.isArray(data) ? data : data.data || [];
+
+        setMenuItems(
+          dishes.map((dish: { id: string; name: string; price: number }) => ({
+            id: dish.id,
+            name: dish.name,
+            price: Number(dish.price) || 0
+          }))
+        );
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching data';
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load dishes';
         setOrdersError(errorMessage);
-        console.error('Failed to fetch tables and orders:', error);
       } finally {
-        setIsLoadingOrders(false);
+        setIsLoadingMenu(false);
       }
     };
-    
-    fetchTablesAndOrders();
-  }, []);
+
+    void fetchMenuItems();
+  }, [user?.restaurant_id]);
 
   const openTable = tables.find((table) => table.id === openTableId) ?? null;
 
@@ -180,21 +238,49 @@ export function WaiterDashboard({
 
   const availableTableNumbers = useMemo(() => {
     const occupiedTables = new Set(tables.map((table) => table.tableNumber));
-    const available: string[] = [];
+    return allTables
+      .map((table) => String(table.table_number).padStart(2, '0'))
+      .filter(
+        (tableNumber) => !occupiedTables.has(tableNumber) || tableNumber === newOrder.tableNumber
+      )
+      .sort();
+  }, [allTables, tables, newOrder.tableNumber]);
 
-    for (let i = 1; i <= 30; i += 1) {
-      const tableNumber = String(i).padStart(2, "0");
-      if (!occupiedTables.has(tableNumber) || tableNumber === newOrder.tableNumber) {
-        available.push(tableNumber);
-      }
+  const filteredTableNumbers = useMemo(() => {
+    const query = newOrder.tableNumber.trim().toLowerCase();
+    if (!query) {
+      return availableTableNumbers.slice(0, 8);
     }
 
-    return available;
-  }, [tables, newOrder.tableNumber]);
+    return availableTableNumbers
+      .filter((tableNumber) => tableNumber.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [availableTableNumbers, newOrder.tableNumber]);
+
+  const handleTableSelect = (tableNumber: string) => {
+    setNewOrder((prev) => ({ ...prev, tableNumber }));
+    setIsTableDropdownOpen(false);
+  };
 
   const getMenuItemByName = (itemName: string) => {
     const normalized = itemName.trim().toLowerCase();
-    return MENU_ITEMS.find((item) => item.name.toLowerCase() === normalized);
+    return menuItems.find((item) => item.name.toLowerCase() === normalized);
+  };
+
+  const filteredMenuItems = useMemo(() => {
+    const query = newItem.itemName.trim().toLowerCase();
+    if (!query) {
+      return menuItems.slice(0, 8);
+    }
+
+    return menuItems
+      .filter((item) => item.name.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [menuItems, newItem.itemName]);
+
+  const handleDishSelect = (item: MenuItem) => {
+    setNewItem((prev) => ({ ...prev, itemName: item.name }));
+    setIsDishDropdownOpen(false);
   };
 
   const addDraftItem = () => {
@@ -210,7 +296,12 @@ export function WaiterDashboard({
       ...prev,
       items: [
         ...prev.items,
-        { name: selectedMenuItem.name, quantity: String(quantity), price: String(selectedMenuItem.price) },
+        {
+          dishId: selectedMenuItem.id,
+          name: selectedMenuItem.name,
+          quantity: String(quantity),
+          price: String(selectedMenuItem.price)
+        },
       ],
     }));
     setNewItem({ itemName: "", quantity: 1 });
@@ -223,36 +314,70 @@ export function WaiterDashboard({
     }));
   };
 
-  const createOrder = (event: React.FormEvent) => {
+  const createOrder = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!newOrder.tableNumber.trim()) {
+      setOrdersError('Please select a table');
       return;
     }
 
-    const normalizedOrderItems: OrderItem[] = newOrder.items.map((item, index) => ({
-      id: `oi-${Date.now()}-${index}`,
-      name: item.name,
-      quantity: Math.max(1, Number(item.quantity) || 1),
-      price: Math.max(0, Number(item.price) || 0),
-    }));
+    if (!user?.staff_id || !user.restaurant_id) {
+      setOrdersError('Session context missing. Please log in again.');
+      return;
+    }
 
-    const runningTotal = normalizedOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    if (newOrder.items.length === 0) {
+      setOrdersError('Add at least one dish to create an order');
+      return;
+    }
 
-    const created: ActiveTable = {
-      id: `t-${Date.now()}`,
-      tableNumber: newOrder.tableNumber.padStart(2, "0"),
-      status: "Order Taken",
-      guests: Number(newOrder.guests) || 1,
-      runningTotal,
-      orderItems: normalizedOrderItems,
-    };
+    const selectedTable = allTables.find(
+      (table) => String(table.table_number).padStart(2, '0') === newOrder.tableNumber
+    );
 
-    setTables((prev) => [created, ...prev]);
-    setOpenTableId(created.id);
-    setNewOrder({ tableNumber: "", guests: "2", notes: "", items: [] });
-    setNewItem({ itemName: "", quantity: 1 });
-    setIsOrderFormOpen(false);
+    if (!selectedTable) {
+      setOrdersError('Selected table could not be resolved');
+      return;
+    }
+
+    try {
+      setIsCreatingOrder(true);
+      setOrdersError(null);
+
+      const payload = {
+        table_id: selectedTable.id,
+        customer_id: null,
+        payment_status: 'pending',
+        num_people: Math.max(1, Number(newOrder.guests) || 1),
+        items: newOrder.items.map((item) => ({
+          dish_id: item.dishId,
+          quantity: Math.max(1, Number(item.quantity) || 1)
+        }))
+      };
+
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(errorPayload?.error || `Failed to create order (${response.status})`);
+      }
+
+      await refreshTablesAndOrders();
+      setOpenTableId(null);
+      setNewOrder({ tableNumber: '', guests: '2', notes: '', items: [] });
+      setNewItem({ itemName: '', quantity: 1 });
+      setIsOrderFormOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create order';
+      setOrdersError(errorMessage);
+    } finally {
+      setIsCreatingOrder(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -430,19 +555,53 @@ export function WaiterDashboard({
                   <form className="grid grid-cols-1 gap-4 md:grid-cols-4" onSubmit={createOrder}>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-muted-foreground">Table Number</label>
-                      <select
-                        value={newOrder.tableNumber}
-                        onChange={(event) => setNewOrder((prev) => ({ ...prev, tableNumber: event.target.value }))}
-                        className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground
-                                 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-accent"
-                      >
-                        <option value="">Select table</option>
-                        {availableTableNumbers.map((tableNumber) => (
-                          <option key={tableNumber} value={tableNumber}>
-                            {tableNumber}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          value={newOrder.tableNumber}
+                          onChange={(event) => {
+                            const normalized = event.target.value.replace(/\D/g, '').slice(0, 2);
+                            setNewOrder((prev) => ({ ...prev, tableNumber: normalized }));
+                            setIsTableDropdownOpen(true);
+                          }}
+                          onFocus={() => setIsTableDropdownOpen(true)}
+                          onBlur={() => {
+                            setTimeout(() => setIsTableDropdownOpen(false), 120);
+                          }}
+                          disabled={allTables.length === 0}
+                          placeholder={allTables.length === 0 ? 'No tables configured' : 'Search table number'}
+                          className="h-11 w-full rounded-xl border border-border/70 bg-card/60 px-4 pr-10 text-sm font-medium text-foreground shadow-xs outline-none transition-all focus:border-accent/60 focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setIsTableDropdownOpen((prev) => !prev)}
+                          className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80"
+                          aria-label="Toggle table suggestions"
+                        >
+                          <ChevronRight className={`size-4 transition-transform ${isTableDropdownOpen ? 'rotate-90' : '-rotate-90'}`} />
+                        </button>
+
+                        {isTableDropdownOpen && allTables.length > 0 && (
+                          <div className="absolute z-60 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-card p-1 shadow-xl">
+                            {filteredTableNumbers.length > 0 ? (
+                              filteredTableNumbers.map((tableNumber) => (
+                                <button
+                                  key={tableNumber}
+                                  type="button"
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    handleTableSelect(tableNumber);
+                                  }}
+                                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-background"
+                                >
+                                  <span className="font-medium text-foreground">Table {tableNumber}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">No matching tables</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -470,19 +629,59 @@ export function WaiterDashboard({
                     <div className="space-y-3 md:col-span-4 rounded-lg border border-border bg-background/40 p-4">
                       <p className="text-sm font-medium text-foreground">Add Food Items</p>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-                        <input
-                          list="menu-item-options"
-                          value={newItem.itemName}
-                          onChange={(event) => setNewItem((prev) => ({ ...prev, itemName: event.target.value }))}
-                          placeholder="Type or select food item"
-                          className="md:col-span-3 w-full rounded-lg border border-border bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground
-                                   outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-accent"
-                        />
-                        <datalist id="menu-item-options">
-                          {MENU_ITEMS.map((menuItem) => (
-                            <option key={menuItem.id} value={menuItem.name} />
-                          ))}
-                        </datalist>
+                        <div className="relative md:col-span-3">
+                          <input
+                            value={newItem.itemName}
+                            onChange={(event) => {
+                              setNewItem((prev) => ({ ...prev, itemName: event.target.value }));
+                              setIsDishDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsDishDropdownOpen(true)}
+                            onBlur={() => {
+                              setTimeout(() => setIsDishDropdownOpen(false), 120);
+                            }}
+                            disabled={isLoadingMenu || menuItems.length === 0}
+                            placeholder={
+                              isLoadingMenu
+                                ? "Loading menu..."
+                                : menuItems.length === 0
+                                  ? "No dishes available"
+                                  : "Search dish name"
+                            }
+                            className="h-11 w-full rounded-xl border border-border/70 bg-card/60 px-4 pr-10 text-sm font-medium text-foreground shadow-xs outline-none transition-all focus:border-accent/60 focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIsDishDropdownOpen((prev) => !prev)}
+                            className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80"
+                            aria-label="Toggle dish suggestions"
+                          >
+                            <ChevronRight className={`size-4 transition-transform ${isDishDropdownOpen ? 'rotate-90' : '-rotate-90'}`} />
+                          </button>
+
+                          {isDishDropdownOpen && !isLoadingMenu && menuItems.length > 0 && (
+                            <div className="absolute z-60 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-border bg-card p-1 shadow-xl">
+                              {filteredMenuItems.length > 0 ? (
+                                filteredMenuItems.map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      handleDishSelect(item);
+                                    }}
+                                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-background"
+                                  >
+                                    <span className="font-medium text-foreground">{item.name}</span>
+                                    <span className="text-muted-foreground">₹{item.price.toFixed(2)}</span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-2 text-sm text-muted-foreground">No matching dishes</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => { setDraftQty(newItem.quantity); setIsQtySliderOpen(true); }}
@@ -542,11 +741,11 @@ export function WaiterDashboard({
                       </button>
                       <button
                         type="submit"
-                        disabled={!newOrder.tableNumber.trim()}
+                        disabled={!newOrder.tableNumber.trim() || newOrder.items.length === 0 || isCreatingOrder || isLoadingMenu}
                         className="rounded-lg border border-primary/20 bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-all
                                  hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Create Order
+                        {isCreatingOrder ? 'Creating...' : 'Create Order'}
                       </button>
                     </div>
                   </form>

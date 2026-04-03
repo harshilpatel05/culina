@@ -33,7 +33,7 @@ import { MacOSSidebar } from "@/components/ui/macos-sidebar-base";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 
-type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
+type TableStatus = "Unoccupied" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 type OrderStatus = 'placed' | 'preparing' | 'served' | 'completed' | 'cancelled';
 type StaffStatus = "On Floor" | "On Break" | "Closing";
 type TableFilter = "All" | TableStatus;
@@ -61,6 +61,25 @@ type ManagerTable = {
   orderItems: OrderItem[];
 };
 
+type ApiOrderItem = {
+  quantity?: number;
+  price?: number;
+  dishes?: {
+    name?: string;
+  };
+};
+
+type ApiOrder = {
+  id: string;
+  table_id?: string;
+  taken_by?: string;
+  status: OrderStatus | string;
+  num_people?: number;
+  total_amount?: number;
+  order_time?: string;
+  order_items?: ApiOrderItem[];
+};
+
 type OrderItem = {
   id: string;
   name: string;
@@ -78,155 +97,6 @@ type ManagerDashboardProps = {
   managerName?: string;
 };
 
-const INITIAL_TABLES: ManagerTable[] = [
-  {
-    id: "t1",
-    tableNumber: "01",
-    waiterId: "w1",
-    status: "Dish Ready",
-    guests: 4,
-    runningTotal: 3240,
-    elapsedMinutes: 52,
-    orderItems: [
-      { id: "t1-1", name: "Paneer Tikka", quantity: 2, price: 520 },
-      { id: "t1-2", name: "Butter Naan", quantity: 6, price: 90 },
-      { id: "t1-3", name: "Mango Lassi", quantity: 4, price: 180 },
-    ],
-  },
-  {
-    id: "t2",
-    tableNumber: "03",
-    waiterId: "w2",
-    status: "Order Taken",
-    guests: 2,
-    runningTotal: 1850,
-    elapsedMinutes: 28,
-    orderItems: [
-      { id: "t2-1", name: "Margherita Pizza", quantity: 1, price: 920 },
-      { id: "t2-2", name: "Caesar Salad", quantity: 1, price: 560 },
-      { id: "t2-3", name: "Sparkling Water", quantity: 2, price: 185 },
-    ],
-  },
-  {
-    id: "t3",
-    tableNumber: "04",
-    waiterId: "w1",
-    status: "Needs Bill",
-    guests: 5,
-    runningTotal: 5790,
-    elapsedMinutes: 94,
-    orderItems: [
-      { id: "t3-1", name: "Ribeye Steak", quantity: 2, price: 1620 },
-      { id: "t3-2", name: "Truffle Pasta", quantity: 1, price: 980 },
-      { id: "t3-3", name: "House Red Wine", quantity: 2, price: 775 },
-    ],
-  },
-  {
-    id: "t4",
-    tableNumber: "05",
-    waiterId: "w3",
-    status: "Seated",
-    guests: 2,
-    runningTotal: 0,
-    elapsedMinutes: 11,
-    orderItems: [],
-  },
-  {
-    id: "t5",
-    tableNumber: "06",
-    waiterId: "w3",
-    status: "Served",
-    guests: 3,
-    runningTotal: 2640,
-    elapsedMinutes: 67,
-    orderItems: [
-      { id: "t5-1", name: "Dal Makhani", quantity: 2, price: 640 },
-      { id: "t5-2", name: "Butter Naan", quantity: 6, price: 90 },
-      { id: "t5-3", name: "Gulab Jamun", quantity: 3, price: 120 },
-    ],
-  },
-  {
-    id: "t6",
-    tableNumber: "08",
-    waiterId: "w2",
-    status: "Dish Ready",
-    guests: 6,
-    runningTotal: 4920,
-    elapsedMinutes: 73,
-    orderItems: [
-      { id: "t6-1", name: "Grilled Salmon", quantity: 3, price: 1190 },
-      { id: "t6-2", name: "French Fries", quantity: 2, price: 320 },
-      { id: "t6-3", name: "Sparkling Water", quantity: 4, price: 185 },
-    ],
-  },
-  {
-    id: "t7",
-    tableNumber: "10",
-    waiterId: "w2",
-    status: "Order Taken",
-    guests: 2,
-    runningTotal: 2210,
-    elapsedMinutes: 31,
-    orderItems: [
-      { id: "t7-1", name: "Truffle Pasta", quantity: 1, price: 980 },
-      { id: "t7-2", name: "Cheesecake", quantity: 2, price: 305 },
-      { id: "t7-3", name: "Coffee", quantity: 2, price: 210 },
-    ],
-  },
-  {
-    id: "t8",
-    tableNumber: "12",
-    waiterId: "w1",
-    status: "Served",
-    guests: 4,
-    runningTotal: 3380,
-    elapsedMinutes: 61,
-    orderItems: [
-      { id: "t8-1", name: "Paneer Tikka", quantity: 1, price: 520 },
-      { id: "t8-2", name: "Margherita Pizza", quantity: 2, price: 920 },
-      { id: "t8-3", name: "Mango Lassi", quantity: 2, price: 180 },
-    ],
-  },
-  {
-    id: "t9",
-    tableNumber: "15",
-    waiterId: "w1",
-    status: "Needs Bill",
-    guests: 2,
-    runningTotal: 2760,
-    elapsedMinutes: 84,
-    orderItems: [
-      { id: "t9-1", name: "Ribeye Steak", quantity: 1, price: 1620 },
-      { id: "t9-2", name: "House Red Wine", quantity: 1, price: 775 },
-      { id: "t9-3", name: "Cheesecake", quantity: 1, price: 365 },
-    ],
-  },
-  {
-    id: "t10",
-    tableNumber: "17",
-    waiterId: "w4",
-    status: "Seated",
-    guests: 8,
-    runningTotal: 0,
-    elapsedMinutes: 16,
-    orderItems: [],
-  },
-  {
-    id: "t11",
-    tableNumber: "18",
-    waiterId: "w4",
-    status: "Dish Ready",
-    guests: 4,
-    runningTotal: 4170,
-    elapsedMinutes: 57,
-    orderItems: [
-      { id: "t11-1", name: "Grilled Salmon", quantity: 2, price: 1190 },
-      { id: "t11-2", name: "Caesar Salad", quantity: 2, price: 560 },
-      { id: "t11-3", name: "Sparkling Water", quantity: 2, price: 185 },
-    ],
-  },
-];
-
 const TREND_DATA: TrendPoint[] = [
   { hour: "12 PM", revenue: 8200, tables: 6 },
   { hour: "1 PM", revenue: 11200, tables: 8 },
@@ -237,10 +107,10 @@ const TREND_DATA: TrendPoint[] = [
   { hour: "6 PM", revenue: 16800, tables: 12 },
 ];
 
-const FILTERS: TableFilter[] = ["All", "Seated", "Order Taken", "Dish Ready", "Served", "Needs Bill"];
+const FILTERS: TableFilter[] = ["All", "Unoccupied", "Order Taken", "Dish Ready", "Served", "Needs Bill"];
 
 const statusColorMap: Record<TableStatus, string> = {
-  Seated: "border-blue-200/30 bg-blue-500/10 text-blue-300 dark:border-blue-400/30 dark:bg-blue-500/20 dark:text-blue-200",
+  Unoccupied: "border-slate-200/30 bg-slate-500/10 text-slate-300 dark:border-slate-400/30 dark:bg-slate-500/20 dark:text-slate-200",
   "Order Taken": "border-amber-200/30 bg-amber-500/10 text-amber-300 dark:border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200",
   "Dish Ready": "border-green-200/30 bg-green-500/10 text-green-300 dark:border-green-400/30 dark:bg-green-500/20 dark:text-green-200",
   Served: "border-purple-200/30 bg-purple-500/10 text-purple-300 dark:border-purple-400/30 dark:bg-purple-500/20 dark:text-purple-200",
@@ -336,12 +206,21 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
         
         // Extract arrays from responses
         const tablesList = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
-        const ordersList = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+        const ordersList: ApiOrder[] = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
         
         // Create a map of orders by table_id for quick lookup
-        const ordersByTableId: Record<string, any> = {};
-        ordersList.forEach((order: any) => {
-          if (order.table_id) {
+        const activeStatuses = new Set(['placed', 'preparing', 'served']);
+        const sortedActiveOrders = ordersList
+          .filter((order) => order.table_id && activeStatuses.has(order.status))
+          .sort((left, right) => {
+            const leftTime = left.order_time ? new Date(left.order_time).getTime() : 0;
+            const rightTime = right.order_time ? new Date(right.order_time).getTime() : 0;
+            return rightTime - leftTime;
+          });
+
+        const ordersByTableId: Record<string, ApiOrder> = {};
+        sortedActiveOrders.forEach((order) => {
+          if (order.table_id && !ordersByTableId[order.table_id]) {
             ordersByTableId[order.table_id] = order;
           }
         });
@@ -350,18 +229,22 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
         const transformedTables = tablesList
           .map((table: any) => {
             const order = ordersByTableId[table.id];
+            const elapsedMs = order?.order_time
+              ? Date.now() - new Date(order.order_time).getTime()
+              : 0;
+            const elapsedMinutes = elapsedMs > 0 ? Math.floor(elapsedMs / 60000) : 0;
             return {
               id: table.id,
               tableNumber: String(table.table_number).padStart(2, '0'),
               waiterId: order?.taken_by || 'unassigned',
-              status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
+              status: order ? mapOrderStatusToTableStatus(order.status) : 'Unoccupied',
               guests: order?.num_people || 1,
               runningTotal: order ? parseFloat(order.total_amount) || 0 : 0,
-              elapsedMinutes: order ? Math.floor((new Date().getTime() - new Date(order.order_time).getTime()) / 60000) : 0,
+              elapsedMinutes,
               orderItems: order?.order_items && Array.isArray(order.order_items)
-                ? order.order_items.map((item: any, idx: number) => ({
+                ? order.order_items.map((item: ApiOrderItem, idx: number) => ({
                     id: `${order.id}-item-${idx}`,
-                    name: item.name || item.dish_name || 'Unknown',
+                    name: item.dishes?.name || 'Unknown',
                     quantity: item.quantity || 1,
                     price: parseFloat(item.price) || 0,
                   }))
@@ -429,9 +312,10 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
     const billCount = tables.filter((table) => table.status === "Needs Bill").length;
     const revenue = tables.reduce((sum, table) => sum + table.runningTotal, 0);
     const onDuty = staff.filter((member) => member.status !== "On Break").length;
+    const activeTables = tables.filter((table) => table.status !== 'Unoccupied').length;
 
     return {
-      activeTables: tables.length,
+      activeTables,
       readyCount,
       billCount,
       onDuty,
