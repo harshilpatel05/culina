@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { KeyRound, ScanLine, ShieldCheck, UtensilsCrossed } from 'lucide-react'
 
@@ -19,10 +20,24 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/utils/supabase/client'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function StaffLoginPage() {
+	const router = useRouter()
+	const { user, loading: authLoading } = useAuth()
 	const [isManagerLoading, setIsManagerLoading] = useState(false)
 	const [managerError, setManagerError] = useState<string | null>(null)
+
+	// Redirect if already authenticated
+	useEffect(() => {
+		if (!authLoading && user) {
+			if (user.role === 'manager' || user.role === 'admin') {
+				router.push('/manager-dash')
+			} else {
+				router.push('/waiter-dash')
+			}
+		}
+	}, [user, authLoading, router])
 
 	const handleManagerGoogleSignIn = async () => {
 		setManagerError(null)
@@ -171,8 +186,77 @@ type LoginFormProps = {
 }
 
 function LoginForm({ title, subtitle }: LoginFormProps) {
+	const router = useRouter()
+	const [staffId, setStaffId] = useState('')
+	const [password, setPassword] = useState('')
+	const [rememberMe, setRememberMe] = useState(false)
+	const [isLoading, setIsLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const role = title.toLowerCase().startsWith('waiter') ? 'staff' : 'manager'
+
+	useEffect(() => {
+		// Load remembered staff ID if available
+		const savedStaffId = localStorage.getItem('remembered_staff_id')
+		if (savedStaffId) {
+			setStaffId(savedStaffId)
+			setRememberMe(true)
+		}
+	}, [])
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault()
+		setError(null)
+		setIsLoading(true)
+
+		try {
+			// Call the staff authentication API
+			const response = await fetch('/api/staff-auth', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				credentials: 'include', // Important: to include cookies
+				body: JSON.stringify({
+					staff_id: staffId,
+					password: password
+				})
+			})
+
+			const data = await response.json()
+
+			if (!response.ok) {
+				setError(data.error || 'Login failed. Please try again.')
+				setIsLoading(false)
+				return
+			}
+
+			// Store or clear remembered staff ID
+			if (rememberMe) {
+				localStorage.setItem('remembered_staff_id', staffId)
+			} else {
+				localStorage.removeItem('remembered_staff_id')
+			}
+
+			// Authentication successful
+			// JWT is automatically stored in httpOnly cookie by the API
+			console.log('Login successful:', data.message)
+
+			// Redirect based on role
+			const userRole = data.user.role
+			if (userRole === 'manager' || userRole === 'admin') {
+				router.push('/manager-dash')
+			} else {
+				router.push('/waiter-dash')
+			}
+		} catch (err) {
+			console.error('Login error:', err)
+			setError(err instanceof Error ? err.message : 'An error occurred during login')
+			setIsLoading(false)
+		}
+	}
+
 	return (
-		<form className="space-y-4">
+		<form onSubmit={handleSubmit} className="space-y-4">
 			<div className="rounded-lg border border-border/70 bg-background/70 p-3">
 				<p className="text-sm font-medium">{title}</p>
 				<p className="text-xs text-muted-foreground">{subtitle}</p>
@@ -180,20 +264,47 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 
 			<div className="space-y-2">
 				<Label htmlFor={`${title}-staff-id`}>Staff ID</Label>
-				<Input id={`${title}-staff-id`} type="text" placeholder="CUL-1024" />
+				<Input 
+					id={`${title}-staff-id`} 
+					type="text" 
+					placeholder="CUL-1024"
+					value={staffId}
+					onChange={(e) => setStaffId(e.target.value)}
+					disabled={isLoading}
+					required
+				/>
 			</div>
 
 			<div className="space-y-2">
 				<Label htmlFor={`${title}-pin`}>Password</Label>
 				<div className="relative">
-					<Input id={`${title}-pin`} type="password" placeholder="Enter password" />
+					<Input 
+						id={`${title}-pin`} 
+						type="password" 
+						placeholder="Enter password"
+						value={password}
+						onChange={(e) => setPassword(e.target.value)}
+						disabled={isLoading}
+						required
+					/>
 					<KeyRound className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 				</div>
 			</div>
 
+			{error && (
+				<div className="rounded-md bg-destructive/10 p-3">
+					<p className="text-xs text-destructive">{error}</p>
+				</div>
+			)}
+
 			<div className="flex items-center justify-between gap-2">
 				<div className="flex items-center gap-2">
-					<Checkbox id={`${title}-remember`} />
+					<Checkbox 
+						id={`${title}-remember`}
+						checked={rememberMe}
+						onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+						disabled={isLoading}
+					/>
 					<Label htmlFor={`${title}-remember`} className="text-xs text-muted-foreground">
 						Keep me signed in
 					</Label>
@@ -203,8 +314,12 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 				</Link>
 			</div>
 
-			<Button type="submit" className="w-full">
-				Sign In
+			<Button 
+				type="submit" 
+				className="w-full"
+				disabled={isLoading || !staffId || !password}
+			>
+				{isLoading ? 'Signing in...' : 'Sign In'}
 			</Button>
 		</form>
 	)
