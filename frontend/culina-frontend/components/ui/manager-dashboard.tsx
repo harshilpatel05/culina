@@ -63,7 +63,7 @@ type ManagerTable = {
 
 type ApiOrderItem = {
   quantity?: number;
-  price?: number;
+  price?: number | string;
   dishes?: {
     name?: string;
   };
@@ -75,7 +75,7 @@ type ApiOrder = {
   taken_by?: string;
   status: OrderStatus | string;
   num_people?: number;
-  total_amount?: number;
+  total_amount?: number | string;
   order_time?: string;
   order_items?: ApiOrderItem[];
 };
@@ -239,14 +239,14 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
               waiterId: order?.taken_by || 'unassigned',
               status: order ? mapOrderStatusToTableStatus(order.status) : 'Unoccupied',
               guests: order?.num_people || 1,
-              runningTotal: order ? parseFloat(order.total_amount) || 0 : 0,
+              runningTotal: order ? Number(order.total_amount ?? 0) : 0,
               elapsedMinutes,
               orderItems: order?.order_items && Array.isArray(order.order_items)
                 ? order.order_items.map((item: ApiOrderItem, idx: number) => ({
                     id: `${order.id}-item-${idx}`,
                     name: item.dishes?.name || 'Unknown',
                     quantity: item.quantity || 1,
-                    price: parseFloat(item.price) || 0,
+                    price: Number(item.price ?? 0),
                   }))
                 : [],
             } as ManagerTable;

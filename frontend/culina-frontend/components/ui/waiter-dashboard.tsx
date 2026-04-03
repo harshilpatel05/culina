@@ -150,7 +150,7 @@ export function WaiterDashboard({
         };
       });
 
-      const transformedTables = tablesList
+      const transformedTables: ActiveTable[] = tablesList
         .map((table: { id: string; table_number: number }) => {
           const order = ordersByTableId[table.id];
           return {
@@ -169,7 +169,7 @@ export function WaiterDashboard({
               : [],
           };
         })
-        .filter((table) => table.status !== 'Seated' || table.orderItems.length > 0);
+        .filter((table: ActiveTable) => table.status !== 'Seated' || table.orderItems.length > 0);
 
       setTables(transformedTables);
     } catch (error) {

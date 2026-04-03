@@ -59,4 +59,3 @@ export async function PUT(req: Request) {
 
   return NextResponse.json(data)
 }
-}
