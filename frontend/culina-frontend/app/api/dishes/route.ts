@@ -7,8 +7,8 @@ export async function GET() {
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
-    .from('customers')
-    .select('*, restaurants(name)')
+    .from('dishes')
+    .select('*, restaurants(name), menus(name)')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -23,12 +23,15 @@ export async function POST(req: Request) {
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
-    .from('customers')
+    .from('dishes')
     .insert({
       restaurant_id: body.restaurant_id,
+      menu_id: body.menu_id,
       name: body.name,
-      phone: body.phone,
-      email: body.email
+      category: body.category,
+      price: body.price,
+      cost: body.cost,
+      is_active: body.is_active !== false
     })
     .select()
 
