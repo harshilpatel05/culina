@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, LogOut, Plus, ChevronRight, Moon, Sun } from "lucide-react";
+import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock } from "lucide-react";
 import { useTheme } from "@/app/theme-provider";
+import { AdaptiveSlider } from "@/components/ui/adaptive-slider";
 
 type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 
@@ -132,7 +133,9 @@ export function WaiterDashboard({
   const [isLoggedOut, setIsLoggedOut] = useState(false);
   const [isShiftActive, setIsShiftActive] = useState(false);
   const [newOrder, setNewOrder] = useState({ tableNumber: "", guests: "2", notes: "", items: [] as DraftOrderItem[] });
-  const [newItem, setNewItem] = useState({ itemName: "", quantity: "1" });
+  const [newItem, setNewItem] = useState({ itemName: "", quantity: 1 });
+  const [isQtySliderOpen, setIsQtySliderOpen] = useState(false);
+  const [draftQty, setDraftQty] = useState(1);
 
   const openTable = tables.find((table) => table.id === openTableId) ?? null;
 
@@ -175,7 +178,7 @@ export function WaiterDashboard({
       return;
     }
 
-    const quantity = Math.max(1, Number(newItem.quantity) || 1);
+    const quantity = Math.max(1, newItem.quantity);
 
     setNewOrder((prev) => ({
       ...prev,
@@ -184,7 +187,7 @@ export function WaiterDashboard({
         { name: selectedMenuItem.name, quantity: String(quantity), price: String(selectedMenuItem.price) },
       ],
     }));
-    setNewItem({ itemName: "", quantity: "1" });
+    setNewItem({ itemName: "", quantity: 1 });
   };
 
   const removeDraftItem = (indexToRemove: number) => {
@@ -222,7 +225,7 @@ export function WaiterDashboard({
     setTables((prev) => [created, ...prev]);
     setOpenTableId(created.id);
     setNewOrder({ tableNumber: "", guests: "2", notes: "", items: [] });
-    setNewItem({ itemName: "", quantity: "1" });
+    setNewItem({ itemName: "", quantity: 1 });
     setIsOrderFormOpen(false);
   };
 
@@ -274,7 +277,7 @@ export function WaiterDashboard({
                   transition={{ type: "spring", stiffness: 400, damping: 10 }}
                 >
                   <p className="text-xs text-muted-foreground font-medium">Shift Revenue</p>
-                  <p className="text-2xl font-bold text-accent mt-1">${metrics.revenue.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-accent mt-1">₹{metrics.revenue.toFixed(2)}</p>
                 </motion.div>
               </div>
             </div>
@@ -342,15 +345,18 @@ export function WaiterDashboard({
                   type="button"
                   onClick={() => setIsShiftActive((prev) => !prev)}
                   disabled={isLoggedOut}
-                  className={`col-span-3 w-full rounded-lg px-5 py-3.5 text-base font-bold tracking-wide transition-all border-2 shadow-lg ring-1 ${
+                  className={`col-span-3 w-full rounded-lg px-5 py-2 text-sm font-bold tracking-wide transition-all border-2 shadow-lg ring-1 ${
                     isShiftActive
-                      ? "bg-amber-500/35 border-amber-400/80 text-amber-50 hover:bg-amber-500/45 ring-amber-400/40"
-                      : "bg-emerald-500/35 border-emerald-400/80 text-emerald-50 hover:bg-emerald-500/45 ring-emerald-400/40"
+                      ? "bg-red-500 border-red-600 text-white hover:bg-red-600 ring-red-400/40"
+                      : "bg-neutral-900 border-neutral-700 text-white hover:bg-black ring-neutral-600/40"
                   } disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none`}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.99 }}
                 >
-                  {isShiftActive ? "End Shift" : "Start Shift"}
+                  <span className="flex items-center justify-center gap-2">
+                    <Clock className="size-4" />
+                    {isShiftActive ? "End Shift" : "Start Shift"}
+                  </span>
                 </motion.button>
               </div>
             </div>
@@ -418,7 +424,7 @@ export function WaiterDashboard({
 
                     <div className="space-y-3 md:col-span-4 rounded-lg border border-border bg-background/40 p-4">
                       <p className="text-sm font-medium text-foreground">Add Food Items</p>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                         <input
                           list="menu-item-options"
                           value={newItem.itemName}
@@ -432,16 +438,16 @@ export function WaiterDashboard({
                             <option key={menuItem.id} value={menuItem.name} />
                           ))}
                         </datalist>
-                        <input
-                          value={newItem.quantity}
-                          onChange={(event) => setNewItem((prev) => ({ ...prev, quantity: event.target.value.replace(/\D/g, "") }))}
-                          placeholder="Qty"
-                          className="md:col-span-1 w-full rounded-lg border border-border bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground
-                                   outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-accent"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => { setDraftQty(newItem.quantity); setIsQtySliderOpen(true); }}
+                          className="md:col-span-1 w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground text-center transition-all hover:border-accent hover:ring-2 hover:ring-accent"
+                        >
+                          Qty: {newItem.quantity}
+                        </button>
                         <div className="md:col-span-1 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-muted-foreground">
                           {getMenuItemByName(newItem.itemName)
-                            ? `$${(getMenuItemByName(newItem.itemName)?.price ?? 0).toFixed(2)}`
+                            ? `₹${((getMenuItemByName(newItem.itemName)?.price ?? 0) * newItem.quantity).toFixed(2)}`
                             : "Price"}
                         </div>
                         <button
@@ -461,7 +467,7 @@ export function WaiterDashboard({
                               <div>
                                 <p className="text-sm font-medium text-foreground">{item.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  Qty: {item.quantity} · ${((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
+                                  Qty: {item.quantity} · ₹{((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
                                 </p>
                               </div>
                               <button
@@ -482,7 +488,7 @@ export function WaiterDashboard({
                         type="button"
                         onClick={() => {
                           setIsOrderFormOpen(false);
-                          setNewItem({ itemName: "", quantity: "1" });
+                          setNewItem({ itemName: "", quantity: 1 });
                           setNewOrder({ tableNumber: "", guests: "2", notes: "", items: [] });
                         }}
                         className="rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-secondary/80"
@@ -620,7 +626,7 @@ export function WaiterDashboard({
                       <div className="space-y-3 md:col-span-2">
                         <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Running Total</label>
                         <div className="w-full px-5 py-4 rounded-lg border border-border bg-background/50 text-foreground font-bold text-xl">
-                          <span className="text-green-400">${openTable.runningTotal.toFixed(2)}</span>
+                          <span className="text-green-400">₹{openTable.runningTotal.toFixed(2)}</span>
                         </div>
                       </div>
 
@@ -637,13 +643,13 @@ export function WaiterDashboard({
                                     <p className="text-sm font-medium text-foreground">{item.name}</p>
                                     <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                                   </div>
-                                  <p className="text-sm font-semibold text-foreground">${(item.price * item.quantity).toFixed(2)}</p>
+                                  <p className="text-sm font-semibold text-foreground">₹{(item.price * item.quantity).toFixed(2)}</p>
                                 </div>
                               ))}
                               <div className="flex items-center justify-between border-t border-border pt-3">
                                 <span className="text-sm text-muted-foreground">Total</span>
                                 <span className="text-base font-semibold text-accent">
-                                  ${openTable.orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}
+                                  ₹{openTable.orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}
                                 </span>
                               </div>
                             </div>
@@ -673,6 +679,54 @@ export function WaiterDashboard({
             )}
           </AnimatePresence>
       </div>
+
+      {/* Qty Picker Bottom Sheet */}
+      <AnimatePresence>
+        {isQtySliderOpen && (
+          <>
+            <motion.div
+              key="qty-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsQtySliderOpen(false)}
+              className="fixed inset-0 z-70 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              key="qty-sheet"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="fixed bottom-0 left-0 right-0 z-71 flex flex-col items-center gap-4 rounded-t-3xl bg-[#FEFEFE] px-6 pb-8 pt-4 shadow-2xl dark:bg-neutral-900"
+            >
+              <div className="h-1 w-10 rounded-full bg-border" />
+              <p className="text-sm font-semibold text-muted-foreground tracking-widest uppercase">Select Quantity</p>
+              <AdaptiveSlider
+                label="Quantity"
+                unit="qty"
+                min={1}
+                max={10}
+                step={1}
+                defaultValue={draftQty}
+                value={draftQty}
+                onChange={setDraftQty}
+                className="h-auto w-full max-w-sm rounded-2xl p-4 sm:p-6 shadow-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setNewItem((prev) => ({ ...prev, quantity: draftQty }));
+                  setIsQtySliderOpen(false);
+                }}
+                className="w-full max-w-sm rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90"
+              >
+                Done
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
