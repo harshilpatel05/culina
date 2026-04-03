@@ -295,11 +295,17 @@ const staffStatusColorMap: Record<StaffStatus, string> = {
 const chartConfig = {
   revenue: {
     label: "Revenue",
-    color: "hsl(var(--accent))",
+    theme: {
+      light: "var(--accent)",
+      dark: "var(--primary)",
+    },
   },
   tables: {
     label: "Tables",
-    color: "hsl(var(--primary))",
+    theme: {
+      light: "var(--primary)",
+      dark: "var(--primary)",
+    },
   },
 };
 
@@ -427,8 +433,8 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-4 xl:items-end">
-            <div className="rounded-xl border border-border bg-card/50 px-4 py-3 backdrop-blur-sm">
+          <div className="flex w-full flex-col items-start gap-4 sm:w-[24rem] xl:items-end">
+            <div className="w-full rounded-xl border border-border bg-card/50 px-4 py-3 backdrop-blur-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Shift State</p>
               <div className="mt-3 flex items-center gap-3">
                 <span className={`inline-flex rounded-md border px-3 py-1 text-xs font-semibold ${isShiftOpen ? staffStatusColorMap["On Floor"] : staffStatusColorMap.Closing}`}>
@@ -440,7 +446,7 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
               </div>
             </div>
 
-            <div className="grid w-full grid-cols-[3rem_1fr_auto] gap-3 sm:w-auto">
+            <div className="grid w-full grid-cols-[3rem_1fr_auto] gap-3">
               <motion.button
                 type="button"
                 onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
