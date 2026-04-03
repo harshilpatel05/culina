@@ -62,8 +62,10 @@ type ManagerTable = {
 };
 
 type ApiOrderItem = {
+  dish_id?: string;
   quantity?: number;
   price?: number | string;
+  prep_time?: number | string | null;
   dishes?: {
     name?: string;
   };
@@ -148,6 +150,27 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+function getOrderPrepMinutes(orderItems: ApiOrderItem[] | undefined, fallbackPerDish = 15) {
+  if (!Array.isArray(orderItems) || orderItems.length === 0) {
+    return 0;
+  }
+
+  const uniqueDishPrep = new Map<string, number>();
+
+  orderItems.forEach((item, index) => {
+    const key = item.dish_id || item.dishes?.name || `dish-${index}`;
+    const parsedPrep = Number(item.prep_time ?? fallbackPerDish);
+    const prepMinutes = Number.isFinite(parsedPrep) && parsedPrep > 0 ? parsedPrep : fallbackPerDish;
+    const existing = uniqueDishPrep.get(key);
+
+    if (existing === undefined || prepMinutes > existing) {
+      uniqueDishPrep.set(key, prepMinutes);
+    }
+  });
+
+  return Array.from(uniqueDishPrep.values()).reduce((sum, minutes) => sum + minutes, 0);
+}
+
 export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -229,10 +252,11 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
         const transformedTables = tablesList
           .map((table: any) => {
             const order = ordersByTableId[table.id];
-            const elapsedMs = order?.order_time
-              ? Date.now() - new Date(order.order_time).getTime()
-              : 0;
-            const elapsedMinutes = elapsedMs > 0 ? Math.floor(elapsedMs / 60000) : 0;
+            const orderItems = order?.order_items && Array.isArray(order.order_items)
+              ? order.order_items
+              : [];
+            // Same dish quantities should not multiply prep time; only unique dishes add up.
+            const elapsedMinutes = getOrderPrepMinutes(orderItems);
             return {
               id: table.id,
               tableNumber: String(table.table_number).padStart(2, '0'),
@@ -241,14 +265,12 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
               guests: order?.num_people || 1,
               runningTotal: order ? Number(order.total_amount ?? 0) : 0,
               elapsedMinutes,
-              orderItems: order?.order_items && Array.isArray(order.order_items)
-                ? order.order_items.map((item: ApiOrderItem, idx: number) => ({
-                    id: `${order.id}-item-${idx}`,
-                    name: item.dishes?.name || 'Unknown',
-                    quantity: item.quantity || 1,
-                    price: Number(item.price ?? 0),
-                  }))
-                : [],
+              orderItems: orderItems.map((item: ApiOrderItem, idx: number) => ({
+                id: `${order?.id ?? table.id}-item-${idx}`,
+                name: item.dishes?.name || 'Unknown',
+                quantity: item.quantity || 1,
+                price: Number(item.price ?? 0),
+              })),
             } as ManagerTable;
           });
         

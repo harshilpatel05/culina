@@ -25,7 +25,7 @@ export async function GET() {
 
   let query = supabase
     .from('orders')
-    .select('*, customers(name), restaurant_tables(table_number), staff(name), restaurants(name), order_items(quantity, price, dishes(name))')
+    .select('*, customers(name), restaurant_tables(table_number), staff(name), restaurants(name), order_items(dish_id, quantity, price, prep_time, dishes(name))')
     .eq('restaurant_id', payload.restaurant_id)
 
   // Waiter/staff dashboards should only see their own active tables.
