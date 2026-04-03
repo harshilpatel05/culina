@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Area,
@@ -11,9 +12,13 @@ import {
 } from "recharts";
 import {
   Activity,
+  BookOpen,
+  Boxes,
+  Building2,
   Briefcase,
   ChevronRight,
   Clock3,
+  LayoutDashboard,
   LogOut,
   Moon,
   Sun,
@@ -24,9 +29,11 @@ import {
 
 import { useTheme } from "@/app/theme-provider";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { MacOSSidebar } from "@/components/ui/macos-sidebar-base";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
+type OrderStatus = 'placed' | 'preparing' | 'served' | 'completed' | 'cancelled';
 type StaffStatus = "On Floor" | "On Break" | "Closing";
 type TableFilter = "All" | TableStatus;
 
@@ -318,14 +325,103 @@ function formatCurrency(amount: number) {
 }
 
 export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProps) {
+  const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
-  const [tables, setTables] = useState<ManagerTable[]>(INITIAL_TABLES);
+  const [tables, setTables] = useState<ManagerTable[]>([]);
   const [staff] = useState<StaffMember[]>(INITIAL_STAFF);
   const [selectedFilter, setSelectedFilter] = useState<TableFilter>("All");
-  const [openStaffId, setOpenStaffId] = useState<string | null>(INITIAL_STAFF[0]?.id ?? null);
+  const [openStaffId, setOpenStaffId] = useState<string | null>(null);
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [isLoggedOut, setIsLoggedOut] = useState(false);
   const [isShiftOpen, setIsShiftOpen] = useState(true);
+  const [isLoadingTables, setIsLoadingTables] = useState(true);
+  const [tablesError, setTablesError] = useState<string | null>(null);
+
+  // Map order status to table status for UI
+  const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
+    switch (orderStatus) {
+      case 'placed':
+        return 'Order Taken';
+      case 'preparing':
+        return 'Dish Ready';
+      case 'served':
+        return 'Served';
+      case 'completed':
+        return 'Needs Bill';
+      case 'cancelled':
+        return 'Order Taken';
+      default:
+        return 'Order Taken';
+    }
+  };
+
+  // Fetch tables and orders from API
+  useEffect(() => {
+    const fetchTablesAndOrders = async () => {
+      try {
+        setIsLoadingTables(true);
+        setTablesError(null);
+        
+        // Fetch both tables and orders in parallel
+        const [tablesRes, ordersRes] = await Promise.all([
+          fetch('/api/tables'),
+          fetch('/api/orders')
+        ]);
+        
+        if (!tablesRes.ok || !ordersRes.ok) {
+          throw new Error(`Failed to fetch data: tables(${tablesRes.status}), orders(${ordersRes.status})`);
+        }
+        
+        const tablesData = await tablesRes.json();
+        const ordersData = await ordersRes.json();
+        
+        // Extract arrays from responses
+        const tablesList = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
+        const ordersList = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+        
+        // Create a map of orders by table_id for quick lookup
+        const ordersByTableId: Record<string, any> = {};
+        ordersList.forEach((order: any) => {
+          if (order.table_id) {
+            ordersByTableId[order.table_id] = order;
+          }
+        });
+        
+        // Transform tables to ManagerTable format, including order data if available
+        const transformedTables = tablesList
+          .map((table: any) => {
+            const order = ordersByTableId[table.id];
+            return {
+              id: table.id,
+              tableNumber: String(table.table_number).padStart(2, '0'),
+              waiterId: order?.taken_by || 'unassigned',
+              status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
+              guests: order?.num_people || 1,
+              runningTotal: order ? parseFloat(order.total_amount) || 0 : 0,
+              elapsedMinutes: order ? Math.floor((new Date().getTime() - new Date(order.order_time).getTime()) / 60000) : 0,
+              orderItems: order?.order_items && Array.isArray(order.order_items)
+                ? order.order_items.map((item: any, idx: number) => ({
+                    id: `${order.id}-item-${idx}`,
+                    name: item.name || item.dish_name || 'Unknown',
+                    quantity: item.quantity || 1,
+                    price: parseFloat(item.price) || 0,
+                  }))
+                : [],
+            } as ManagerTable;
+          });
+        
+        setTables(transformedTables);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching data';
+        setTablesError(errorMessage);
+        console.error('Failed to fetch tables and orders:', error);
+      } finally {
+        setIsLoadingTables(false);
+      }
+    };
+    
+    fetchTablesAndOrders();
+  }, []);
 
   const metrics = useMemo(() => {
     const readyCount = tables.filter((table) => table.status === "Dish Ready").length;
@@ -393,9 +489,43 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
     setOpenTableId(null);
   };
 
+  const handleSidebarNav = (label: string) => {
+    switch (label) {
+      case "Dashboard":
+        router.push("/manager-dash");
+        break;
+      case "Staff":
+        router.push("/manager-dash/staff");
+        break;
+      case "Inventory":
+        router.push("/manager-dash/inventory");
+        break;
+      case "Recipe":
+        router.push("/manager-dash/recipe");
+        break;
+      case "Restaurant":
+        router.push("/manager-dash/restaurant");
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
-    <main className="min-h-screen w-full bg-background dark:bg-linear-to-br dark:from-background dark:via-background dark:to-card">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-4 sm:p-6 lg:p-8">
+    <main className="min-h-screen w-full bg-white">
+      <MacOSSidebar
+          items={[
+            { label: "Dashboard", icon: <LayoutDashboard className="size-4" /> },
+            { label: "Staff", icon: <Users className="size-4" /> },
+            { label: "Inventory", icon: <Boxes className="size-4" /> },
+            { label: "Recipe", icon: <BookOpen className="size-4" /> },
+            { label: "Restaurant", icon: <Building2 className="size-4" /> },
+          ]}
+          defaultOpen={false}
+          onItemClick={handleSidebarNav}
+          className="w-full max-w-384 p-1 sm:p-2 lg:p-4"
+        >
+      <div className="flex w-full flex-col gap-8 pl-3 sm:pl-4 lg:pl-5">
         <header className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex-1 space-y-4">
             <div>
@@ -622,6 +752,36 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
               ))}
             </div>
           </div>
+
+          {isLoadingTables && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg border border-border/50 bg-card/50 px-4 py-3"
+            >
+              <p className="text-sm text-muted-foreground font-medium">Loading tables and orders...</p>
+            </motion.div>
+          )}
+
+          {tablesError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+            >
+              <p className="text-sm text-destructive font-medium">Error loading tables: {tablesError}</p>
+            </motion.div>
+          )}
+
+          {!isLoadingTables && tables.length === 0 && !tablesError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg border border-border/50 bg-card/50 px-4 py-3 text-center"
+            >
+              <p className="text-sm text-muted-foreground font-medium">No tables available</p>
+            </motion.div>
+          )}
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {visibleTables.map((table) => {
@@ -890,6 +1050,7 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
           )}
         </AnimatePresence>
       </div>
+      </MacOSSidebar>
     </main>
   );
 }

@@ -31,13 +31,18 @@ export async function PUT(
   const body = await request.json()
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
+  const validStatus = ['active', 'holiday', 'inactive']
+  const validRoles = ['manager', 'chef', 'waiter']
+  const status = validStatus.includes(body.status) ? body.status : 'inactive'
+  const role = validRoles.includes(body.role) ? body.role : null
 
   const { data, error } = await supabase
     .from('staff')
     .update({
       name: body.name,
-      role: body.role,
-      hourly_rate: body.hourly_rate
+      role,
+      salary: body.salary,
+      status
     })
     .eq('id', id)
     .select()

@@ -21,14 +21,19 @@ export async function POST(req: Request) {
   const body = await req.json()
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
+  const validStatus = ['active', 'holiday', 'inactive']
+  const validRoles = ['manager', 'chef', 'waiter']
+  const status = validStatus.includes(body.status) ? body.status : 'inactive'
+  const role = validRoles.includes(body.role) ? body.role : null
 
   const { data, error } = await supabase
     .from('staff')
     .insert({
       restaurant_id: body.restaurant_id,
       name: body.name,
-      role: body.role,
-      hourly_rate: body.hourly_rate
+      role,
+      salary: body.salary,
+      status
     })
     .select()
 

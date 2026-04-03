@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock } from "lucide-react";
 import { useTheme } from "@/app/theme-provider";
 import { AdaptiveSlider } from "@/components/ui/adaptive-slider";
 
 type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
+
+type OrderStatus = 'placed' | 'preparing' | 'served' | 'completed' | 'cancelled';
 
 type ActiveTable = {
   id: string;
@@ -43,76 +45,9 @@ type MenuItem = {
 
 const DEFAULT_SHIFT_HOURS = [3, 34, 28];
 
-const MENU_ITEMS: MenuItem[] = [
-  { id: "paneer-tikka", name: "Paneer Tikka", price: 18.5 },
-  { id: "butter-naan", name: "Butter Naan", price: 3.0 },
-  { id: "dal-makhani", name: "Dal Makhani", price: 14.0 },
-  { id: "mango-lassi", name: "Mango Lassi", price: 6.5 },
-  { id: "gulab-jamun", name: "Gulab Jamun", price: 5.0 },
-  { id: "margherita-pizza", name: "Margherita Pizza", price: 22.0 },
-  { id: "caesar-salad", name: "Caesar Salad", price: 13.0 },
-  { id: "sparkling-water", name: "Sparkling Water", price: 4.0 },
-  { id: "chocolate-mousse", name: "Chocolate Mousse", price: 11.0 },
-  { id: "french-fries", name: "French Fries", price: 9.0 },
-  { id: "grilled-salmon", name: "Grilled Salmon", price: 29.5 },
-  { id: "ribeye-steak", name: "Ribeye Steak", price: 34.0 },
-  { id: "truffle-pasta", name: "Truffle Pasta", price: 26.0 },
-  { id: "house-red-wine", name: "House Red Wine", price: 15.0 },
-  { id: "cheesecake", name: "Cheesecake", price: 7.4 },
-];
+const MENU_ITEMS: MenuItem[] = [];
 
-const INITIAL_TABLES: ActiveTable[] = [
-  {
-    id: "t1",
-    tableNumber: "01",
-    status: "Dish Ready",
-    guests: 4,
-    runningTotal: 124.5,
-    orderItems: [
-      { id: "t1-i1", name: "Paneer Tikka", quantity: 1, price: 18.5 },
-      { id: "t1-i2", name: "Butter Naan", quantity: 4, price: 3.0 },
-      { id: "t1-i3", name: "Dal Makhani", quantity: 1, price: 14.0 },
-      { id: "t1-i4", name: "Mango Lassi", quantity: 2, price: 6.5 },
-      { id: "t1-i5", name: "Gulab Jamun", quantity: 2, price: 5.0 },
-    ],
-  },
-  {
-    id: "t2",
-    tableNumber: "02",
-    status: "Seated",
-    guests: 2,
-    runningTotal: 0,
-    orderItems: [],
-  },
-  {
-    id: "t3",
-    tableNumber: "03",
-    status: "Order Taken",
-    guests: 3,
-    runningTotal: 63.0,
-    orderItems: [
-      { id: "t3-i1", name: "Margherita Pizza", quantity: 1, price: 22.0 },
-      { id: "t3-i2", name: "Caesar Salad", quantity: 1, price: 13.0 },
-      { id: "t3-i3", name: "Sparkling Water", quantity: 2, price: 4.0 },
-      { id: "t3-i4", name: "Chocolate Mousse", quantity: 1, price: 11.0 },
-      { id: "t3-i5", name: "French Fries", quantity: 1, price: 9.0 },
-    ],
-  },
-  {
-    id: "t4",
-    tableNumber: "04",
-    status: "Needs Bill",
-    guests: 5,
-    runningTotal: 212.8,
-    orderItems: [
-      { id: "t4-i1", name: "Grilled Salmon", quantity: 2, price: 29.5 },
-      { id: "t4-i2", name: "Ribeye Steak", quantity: 2, price: 34.0 },
-      { id: "t4-i3", name: "Truffle Pasta", quantity: 1, price: 26.0 },
-      { id: "t4-i4", name: "House Red Wine", quantity: 3, price: 15.0 },
-      { id: "t4-i5", name: "Cheesecake", quantity: 2, price: 7.4 },
-    ],
-  },
-];
+
 
 const statusColorMap: Record<TableStatus, string> = {
   Seated: "border-blue-200/30 bg-blue-500/10 text-blue-300 dark:border-blue-400/30 dark:bg-blue-500/20 dark:text-blue-200",
@@ -127,7 +62,7 @@ export function WaiterDashboard({
   shiftHours = DEFAULT_SHIFT_HOURS,
 }: WaiterDashboardProps) {
   const { resolvedTheme, setTheme } = useTheme();
-  const [tables, setTables] = useState<ActiveTable[]>(INITIAL_TABLES);
+  const [tables, setTables] = useState<ActiveTable[]>([]);
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [isOrderFormOpen, setIsOrderFormOpen] = useState(false);
   const [isLoggedOut, setIsLoggedOut] = useState(false);
@@ -136,6 +71,93 @@ export function WaiterDashboard({
   const [newItem, setNewItem] = useState({ itemName: "", quantity: 1 });
   const [isQtySliderOpen, setIsQtySliderOpen] = useState(false);
   const [draftQty, setDraftQty] = useState(1);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+
+  // Map order status to table status for UI
+  const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
+    switch (orderStatus) {
+      case 'placed':
+        return 'Order Taken';
+      case 'preparing':
+        return 'Dish Ready';
+      case 'served':
+        return 'Served';
+      case 'completed':
+        return 'Needs Bill';
+      case 'cancelled':
+        return 'Order Taken';
+      default:
+        return 'Order Taken';
+    }
+  };
+
+  // Fetch tables and orders from API
+  useEffect(() => {
+    const fetchTablesAndOrders = async () => {
+      try {
+        setIsLoadingOrders(true);
+        setOrdersError(null);
+        
+        // Fetch both tables and orders in parallel
+        const [tablesRes, ordersRes] = await Promise.all([
+          fetch('/api/tables'),
+          fetch('/api/orders')
+        ]);
+        
+        if (!tablesRes.ok || !ordersRes.ok) {
+          throw new Error(`Failed to fetch data: tables(${tablesRes.status}), orders(${ordersRes.status})`);
+        }
+        
+        const tablesData = await tablesRes.json();
+        const ordersData = await ordersRes.json();
+        
+        // Extract arrays from responses
+        const tables = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
+        const orders = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+        
+        // Create a map of orders by table_id for quick lookup
+        const ordersByTableId: Record<string, any> = {};
+        orders.forEach((order: any) => {
+          if (order.table_id) {
+            ordersByTableId[order.table_id] = order;
+          }
+        });
+        
+        // Transform tables to ActiveTable format, including order data if available
+        const transformedTables = tables
+          .map((table: any) => {
+            const order = ordersByTableId[table.id];
+            return {
+              id: table.id,
+              tableNumber: String(table.table_number).padStart(2, '0'),
+              status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
+              guests: order?.num_people || 1,
+              runningTotal: order ? parseFloat(order.total_amount) || 0 : 0,
+              orderItems: order?.order_items && Array.isArray(order.order_items)
+                ? order.order_items.map((item: any, idx: number) => ({
+                    id: `${order.id}-item-${idx}`,
+                    name: item.name || item.dish_name || 'Unknown',
+                    quantity: item.quantity || 1,
+                    price: parseFloat(item.price) || 0,
+                  }))
+                : [],
+            };
+          })
+          .filter((table: any) => table.status !== 'Seated' || table.orderItems.length > 0); // Show only occupied tables or tables with orders
+        
+        setTables(transformedTables);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching data';
+        setOrdersError(errorMessage);
+        console.error('Failed to fetch tables and orders:', error);
+      } finally {
+        setIsLoadingOrders(false);
+      }
+    };
+    
+    fetchTablesAndOrders();
+  }, []);
 
   const openTable = tables.find((table) => table.id === openTableId) ?? null;
 
@@ -524,6 +546,36 @@ export function WaiterDashboard({
                 className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
               >
                 <p className="text-sm text-destructive font-medium">Logged out (demo state)</p>
+              </motion.div>
+            )}
+
+            {isLoadingOrders && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-lg border border-border/50 bg-card/50 px-4 py-3"
+              >
+                <p className="text-sm text-muted-foreground font-medium">Loading tables and orders...</p>
+              </motion.div>
+            )}
+
+            {ordersError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+              >
+                <p className="text-sm text-destructive font-medium">Error loading orders: {ordersError}</p>
+              </motion.div>
+            )}
+
+            {!isLoadingOrders && tables.length === 0 && !ordersError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-lg border border-border/50 bg-card/50 px-4 py-3 text-center"
+              >
+                <p className="text-sm text-muted-foreground font-medium">No active orders yet</p>
               </motion.div>
             )}
 
