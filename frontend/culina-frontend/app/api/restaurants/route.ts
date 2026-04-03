@@ -7,8 +7,8 @@ export async function GET() {
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
-    .from('customers')
-    .select('*, restaurants(name)')
+    .from('restaurants')
+    .select('*')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -23,13 +23,34 @@ export async function POST(req: Request) {
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
-    .from('customers')
+    .from('restaurants')
     .insert({
-      restaurant_id: body.restaurant_id,
       name: body.name,
-      phone: body.phone,
-      email: body.email
+      location: body.location,
+      timezone: body.timezone || 'Asia/Kolkata'
     })
+    .select()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json(data)
+}
+
+export async function PUT(req: Request) {
+  const body = await req.json()
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
+
+  const { data, error } = await supabase
+    .from('restaurants')
+    .update({
+      name: body.name,
+      location: body.location,
+      timezone: body.timezone
+    })
+    .eq('id', body.id)
     .select()
 
   if (error) {

@@ -2,13 +2,19 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 
-export async function GET() {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
     .from('customers')
     .select('*, restaurants(name)')
+    .eq('id', id)
+    .single()
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -17,19 +23,23 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
-export async function POST(req: Request) {
-  const body = await req.json()
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const body = await request.json()
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
     .from('customers')
-    .insert({
-      restaurant_id: body.restaurant_id,
+    .update({
       name: body.name,
       phone: body.phone,
       email: body.email
     })
+    .eq('id', id)
     .select()
 
   if (error) {
@@ -37,4 +47,24 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json(data)
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
+
+  const { error } = await supabase
+    .from('customers')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
 }

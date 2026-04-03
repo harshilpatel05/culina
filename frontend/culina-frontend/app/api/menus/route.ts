@@ -7,7 +7,7 @@ export async function GET() {
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
-    .from('customers')
+    .from('menus')
     .select('*, restaurants(name)')
 
   if (error) {
@@ -23,12 +23,11 @@ export async function POST(req: Request) {
   const supabase = createClient(cookieStore)
 
   const { data, error } = await supabase
-    .from('customers')
+    .from('menus')
     .insert({
       restaurant_id: body.restaurant_id,
       name: body.name,
-      phone: body.phone,
-      email: body.email
+      is_active: body.is_active !== false
     })
     .select()
 
