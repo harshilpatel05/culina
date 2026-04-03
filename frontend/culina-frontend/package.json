@@ -21,6 +21,7 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.38.0",
     "input-otp": "^1.4.2",
+    "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",

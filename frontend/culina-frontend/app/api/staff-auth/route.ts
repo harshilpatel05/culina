@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     }
 
     // Generate JWT token with user profile
-    const jwtToken = generateJWT({
+    const jwtToken = await generateJWT({
       id: user.id,
       staff_id: user.staff_id,
       name: user.name,

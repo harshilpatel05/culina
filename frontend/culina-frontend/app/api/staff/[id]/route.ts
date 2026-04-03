@@ -3,6 +3,13 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
 
+const VALID_STATUS = ['active', 'holiday', 'inactive'] as const
+const VALID_ROLES = ['manager', 'chef', 'waiter'] as const
+
+function mapStaffRoleToUserRole(role: string) {
+  return role === 'manager' ? 'manager' : 'staff'
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -32,10 +39,18 @@ export async function PUT(
   const body = await request.json()
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
-  const validStatus = ['active', 'holiday', 'inactive']
-  const validRoles = ['manager', 'chef', 'waiter']
-  const status = validStatus.includes(body.status) ? body.status : 'inactive'
-  const role = validRoles.includes(body.role) ? body.role : null
+  const staffId = typeof body.staff_id === 'string' ? body.staff_id.trim() : ''
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  const status = VALID_STATUS.includes(body.status) ? body.status : 'inactive'
+  const role = VALID_ROLES.includes(body.role) ? body.role : null
+
+  if (!staffId || !name || !role) {
+    return NextResponse.json(
+      { error: 'Missing required fields: staff_id, name, role' },
+      { status: 400 }
+    )
+  }
+
   const updatePayload: {
     staff_id: string | null
     name: string | null
@@ -43,42 +58,53 @@ export async function PUT(
     salary: number | null
     status: string
   } = {
-    staff_id: body.staff_id ?? null,
-    name: body.name,
+    staff_id: staffId,
+    name,
     role,
     salary: body.salary,
     status
   }
 
   try {
+    // Capture current staff_id so a rename can update the matching users row.
+    const { data: existingStaff, error: existingStaffError } = await supabase
+      .from('staff')
+      .select('staff_id')
+      .eq('id', id)
+      .single()
+
+    if (existingStaffError) {
+      return NextResponse.json({ error: existingStaffError.message }, { status: 500 })
+    }
+
+    const previousStaffId = existingStaff.staff_id ?? null
+
     // Update staff record
     const { data: staffData, error: staffError } = await supabase
       .from('staff')
       .update(updatePayload)
       .eq('id', id)
       .select()
+      .single()
 
     if (staffError) {
       return NextResponse.json({ error: staffError.message }, { status: 500 })
     }
 
+    const userRole = mapStaffRoleToUserRole(role)
+
     // Prepare user update payload
     const userUpdatePayload: {
-      name: string | null
-      role?: string
+      staff_id: string
+      restaurant_id: string | null
+      name: string
+      role: string
       password_hash?: string
     } = {
-      name: body.name
-    }
-
-    // Map staff role to user role if role changed
-    if (role) {
-      const userRoleMap: Record<string, string> = {
-        manager: 'manager',
-        chef: 'staff',
-        waiter: 'staff'
-      }
-      userUpdatePayload.role = userRoleMap[role] || 'staff'
+      staff_id: staffId,
+      restaurant_id: body.restaurant_id ?? null,
+      name,
+      role: userRole
     }
 
     // Hash and update password if provided
@@ -86,17 +112,46 @@ export async function PUT(
       userUpdatePayload.password_hash = await bcrypt.hash(body.password, 10)
     }
 
-    // Update user record by staff_id
-    const { error: userError } = await supabase
+    // Update user record using previous staff_id if it changed.
+    const userLookupStaffId = previousStaffId ?? staffId
+    const { data: updatedUsers, error: userError } = await supabase
       .from('users')
       .update(userUpdatePayload)
-      .eq('staff_id', body.staff_id ?? staffData[0]?.staff_id)
+      .eq('staff_id', userLookupStaffId)
+      .select('id')
 
     if (userError) {
       return NextResponse.json(
         { error: `User update failed: ${userError.message}` },
         { status: 500 }
       )
+    }
+
+    if (!updatedUsers || updatedUsers.length === 0) {
+      if (!body.password) {
+        return NextResponse.json(
+          {
+            error:
+              'User profile is missing for this staff member. Provide a password to recreate the staff-auth user.'
+          },
+          { status: 400 }
+        )
+      }
+
+      const { error: recreateUserError } = await supabase.from('users').insert({
+        restaurant_id: body.restaurant_id ?? null,
+        name,
+        role: userRole,
+        staff_id: staffId,
+        password_hash: userUpdatePayload.password_hash
+      })
+
+      if (recreateUserError) {
+        return NextResponse.json(
+          { error: `User recreation failed: ${recreateUserError.message}` },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json(staffData)

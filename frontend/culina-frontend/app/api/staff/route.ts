@@ -3,6 +3,13 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
 
+const VALID_STATUS = ['active', 'holiday', 'inactive'] as const
+const VALID_ROLES = ['manager', 'chef', 'waiter'] as const
+
+function mapStaffRoleToUserRole(role: string) {
+  return role === 'manager' ? 'manager' : 'staff'
+}
+
 export async function GET() {
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
@@ -22,13 +29,14 @@ export async function POST(req: Request) {
   const body = await req.json()
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
-  const validStatus = ['active', 'holiday', 'inactive']
-  const validRoles = ['manager', 'chef', 'waiter']
-  const status = validStatus.includes(body.status) ? body.status : 'inactive'
-  const role = validRoles.includes(body.role) ? body.role : null
+  const staffId = typeof body.staff_id === 'string' ? body.staff_id.trim() : ''
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  const status = VALID_STATUS.includes(body.status) ? body.status : 'inactive'
+  const role = VALID_ROLES.includes(body.role) ? body.role : null
+  const password = typeof body.password === 'string' ? body.password : ''
 
   // Validate required fields
-  if (!body.staff_id || !body.name || !role || !body.password) {
+  if (!staffId || !name || !role || !password) {
     return NextResponse.json(
       { error: 'Missing required fields: staff_id, name, role, password' },
       { status: 400 }
@@ -37,57 +45,99 @@ export async function POST(req: Request) {
 
   try {
     // Hash the password for user storage
-    const passwordHash = await bcrypt.hash(body.password, 10)
+    const passwordHash = await bcrypt.hash(password, 10)
 
     // Create staff record
     const { data: staffData, error: staffError } = await supabase
       .from('staff')
       .insert({
-        staff_id: body.staff_id,
+        staff_id: staffId,
         restaurant_id: body.restaurant_id,
-        name: body.name,
+        name,
         role,
         salary: body.salary,
         status
       })
       .select()
+      .single()
 
     if (staffError) {
       return NextResponse.json({ error: staffError.message }, { status: 500 })
     }
 
-    // Map staff role to user role
-    const userRoleMap: Record<string, string> = {
-      manager: 'manager',
-      chef: 'staff',
-      waiter: 'staff'
-    }
-    const userRole = userRoleMap[role] || 'staff'
+    const userRole = mapStaffRoleToUserRole(role)
 
-    // Create corresponding user record for authentication
-    const { data: userData, error: userError } = await supabase
+    const userPayload = {
+      restaurant_id: body.restaurant_id,
+      name,
+      password_hash: passwordHash,
+      role: userRole,
+      staff_id: staffId
+    }
+
+    // Keep users profile synchronized with staff profile without requiring a DB upsert constraint.
+    const { data: existingUser, error: existingUserError } = await supabase
       .from('users')
-      .insert({
-        restaurant_id: body.restaurant_id,
-        name: body.name,
-        password_hash: passwordHash,
-        role: userRole,
-        staff_id: body.staff_id
-      })
-      .select()
+      .select('id')
+      .eq('staff_id', staffId)
+      .maybeSingle()
+
+    if (existingUserError) {
+      return NextResponse.json(
+        { error: `User lookup failed: ${existingUserError.message}` },
+        { status: 500 }
+      )
+    }
+
+    let userData: unknown = null
+    let userError: { message: string } | null = null
+
+    if (existingUser?.id) {
+      const result = await supabase
+        .from('users')
+        .update(userPayload)
+        .eq('id', existingUser.id)
+        .select()
+        .single()
+
+      userData = result.data
+      userError = result.error
+    } else {
+      const result = await supabase
+        .from('users')
+        .insert(userPayload)
+        .select()
+        .single()
+
+      userData = result.data
+      userError = result.error
+    }
 
     if (userError) {
       // If user creation fails, try to delete the staff record to maintain consistency
-      await supabase.from('staff').delete().eq('id', staffData[0].id)
+      const { error: rollbackError } = await supabase
+        .from('staff')
+        .delete()
+        .eq('id', staffData.id)
+
+      if (rollbackError) {
+        return NextResponse.json(
+          {
+            error: `User sync failed and rollback failed: ${userError.message}. Rollback error: ${rollbackError.message}`
+          },
+          { status: 500 }
+        )
+      }
+
       return NextResponse.json(
-        { error: `User creation failed: ${userError.message}` },
+        { error: `User sync failed: ${userError.message}` },
         { status: 500 }
       )
     }
 
     return NextResponse.json({
-      staff: staffData[0],
-      user: userData[0]
+      staff: staffData,
+      user: userData
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

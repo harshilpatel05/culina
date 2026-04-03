@@ -31,6 +31,7 @@ import { useTheme } from "@/app/theme-provider";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { MacOSSidebar } from "@/components/ui/macos-sidebar-base";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from "@/hooks/use-auth";
 
 type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 type OrderStatus = 'placed' | 'preparing' | 'served' | 'completed' | 'cancelled';
@@ -277,15 +278,18 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
-export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProps) {
+export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const router = useRouter();
+  const { user, logout } = useAuth();
+  const displayManagerName = user?.name ?? managerName ?? "Manager";
   const { resolvedTheme, setTheme } = useTheme();
   const [tables, setTables] = useState<ManagerTable[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<TableFilter>("All");
   const [openStaffId, setOpenStaffId] = useState<string | null>(null);
   const [openTableId, setOpenTableId] = useState<string | null>(null);
-  const [isLoggedOut, setIsLoggedOut] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isShiftOpen, setIsShiftOpen] = useState(true);
   const [isLoadingTables, setIsLoadingTables] = useState(true);
   const [tablesError, setTablesError] = useState<string | null>(null);
@@ -508,6 +512,23 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
     }
   };
 
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    try {
+      setLogoutError(null);
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Logout failed. Please try again.";
+      setLogoutError(errorMessage);
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
     <main className="min-h-screen w-full bg-white">
       <MacOSSidebar
@@ -527,7 +548,7 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
           <div className="flex-1 space-y-4">
             <div>
               <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-                Floor command, {managerName}
+                Floor command, {displayManagerName}
               </h1>
               <p className="mt-2 text-muted-foreground">
                 Track staff load, service bottlenecks, and revenue pacing from one surface.
@@ -588,11 +609,12 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
               <motion.button
                 type="button"
                 onClick={() => setIsShiftOpen((current) => !current)}
+                disabled={isLoggingOut}
                 className={`rounded-md border px-5 py-3 text-sm font-semibold transition-all ${
                   isShiftOpen
                     ? "border-red-500/30 bg-red-500 text-white hover:bg-red-600"
                     : "border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
+                } disabled:cursor-not-allowed disabled:opacity-50`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
@@ -601,25 +623,26 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
 
               <motion.button
                 type="button"
-                onClick={() => setIsLoggedOut(true)}
+                onClick={handleLogout}
+                disabled={isLoggingOut}
                 className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
                 <LogOut size={18} />
-                <span className="hidden sm:inline">Logout</span>
+                <span className="hidden sm:inline">{isLoggingOut ? "Logging out..." : "Logout"}</span>
               </motion.button>
             </div>
           </div>
         </header>
 
-        {isLoggedOut && (
+        {logoutError && (
           <motion.div
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
           >
-            <p className="text-sm font-medium text-destructive">Logged out (demo state)</p>
+            <p className="text-sm font-medium text-destructive">{logoutError}</p>
           </motion.div>
         )}
 

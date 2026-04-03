@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { verifyJWT } from '@/utils/jwt'
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const cookieStore = await cookies()
     const token = cookieStore.get('auth-token')?.value
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     }
 
     // Verify JWT token
-    const payload = verifyJWT(token)
+    const payload = await verifyJWT(token)
 
     if (!payload) {
       return NextResponse.json(

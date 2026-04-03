@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock } from "lucide-react";
 import { useTheme } from "@/app/theme-provider";
 import { AdaptiveSlider } from "@/components/ui/adaptive-slider";
+import { useAuth } from "@/hooks/use-auth";
 
 type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 
@@ -58,14 +59,17 @@ const statusColorMap: Record<TableStatus, string> = {
 };
 
 export function WaiterDashboard({
-  waiterName = "Harshil",
+  waiterName,
   shiftHours = DEFAULT_SHIFT_HOURS,
 }: WaiterDashboardProps) {
+  const { user, logout } = useAuth();
+  const displayName = waiterName ?? user?.name ?? "";
   const { resolvedTheme, setTheme } = useTheme();
   const [tables, setTables] = useState<ActiveTable[]>([]);
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [isOrderFormOpen, setIsOrderFormOpen] = useState(false);
-  const [isLoggedOut, setIsLoggedOut] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isShiftActive, setIsShiftActive] = useState(false);
   const [newOrder, setNewOrder] = useState({ tableNumber: "", guests: "2", notes: "", items: [] as DraftOrderItem[] });
   const [newItem, setNewItem] = useState({ itemName: "", quantity: 1 });
@@ -251,6 +255,23 @@ export function WaiterDashboard({
     setIsOrderFormOpen(false);
   };
 
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    try {
+      setLogoutError(null);
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Logout failed. Please try again.";
+      setLogoutError(errorMessage);
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
     <main className="min-h-screen w-full bg-background dark:bg-linear-to-br dark:from-background dark:via-background dark:to-card">
       <div className="mx-auto w-full max-w-7xl flex flex-col gap-8 p-4 sm:p-6 lg:p-8">
@@ -259,7 +280,7 @@ export function WaiterDashboard({
             <div className="space-y-4 flex-1">
               <div>
                 <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-                  Good day, {waiterName}
+                  Good day, {displayName}
                 </h1>
                 <p className="text-muted-foreground mt-2">Manage your tables and shift performance</p>
               </div>
@@ -340,7 +361,7 @@ export function WaiterDashboard({
                 <motion.button
                   type="button"
                   onClick={() => setIsOrderFormOpen((prev) => !prev)}
-                  disabled={isLoggedOut}
+                  disabled={isLoggingOut}
                   className="flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition-all
                              bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed
                              border border-primary/20"
@@ -353,20 +374,22 @@ export function WaiterDashboard({
 
                 <motion.button
                   type="button"
-                  onClick={() => setIsLoggedOut(true)}
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
                   className="flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition-all
-                             bg-card border border-border text-foreground hover:bg-secondary dark:hover:bg-secondary/50"
+                             bg-card border border-border text-foreground hover:bg-secondary dark:hover:bg-secondary/50
+                             disabled:opacity-50 disabled:cursor-not-allowed"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <LogOut size={18} />
-                  <span className="hidden sm:inline">Logout</span>
+                  <span className="hidden sm:inline">{isLoggingOut ? "Logging out..." : "Logout"}</span>
                 </motion.button>
 
                 <motion.button
                   type="button"
                   onClick={() => setIsShiftActive((prev) => !prev)}
-                  disabled={isLoggedOut}
+                  disabled={isLoggingOut}
                   className={`col-span-3 w-full rounded-lg px-5 py-2 text-sm font-bold tracking-wide transition-all border-2 shadow-lg ring-1 ${
                     isShiftActive
                       ? "bg-red-500 border-red-600 text-white hover:bg-red-600 ring-red-400/40"
@@ -539,13 +562,13 @@ export function WaiterDashboard({
               <p className="text-muted-foreground mt-1">Tap a table to view details and manage orders</p>
             </div>
 
-            {isLoggedOut && (
+            {logoutError && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
               >
-                <p className="text-sm text-destructive font-medium">Logged out (demo state)</p>
+                <p className="text-sm text-destructive font-medium">{logoutError}</p>
               </motion.div>
             )}
 

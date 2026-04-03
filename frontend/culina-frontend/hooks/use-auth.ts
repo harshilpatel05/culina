@@ -48,14 +48,22 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      await fetch('/api/staff-auth/logout', {
+      const response = await fetch('/api/staff-auth/logout', {
         method: 'POST',
         credentials: 'include'
       })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message = payload?.error ?? 'Logout failed'
+        throw new Error(message)
+      }
+
       setUser(null)
       router.push('/staff-login')
     } catch (err) {
       console.error('Logout error:', err)
+      throw err
     }
   }
 

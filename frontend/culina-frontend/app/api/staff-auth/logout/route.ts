@@ -1,18 +1,30 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { verifyJWT } from '@/utils/jwt'
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const cookieStore = await cookies()
     
     // Clear the auth token cookie
     cookieStore.delete('auth-token')
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Logout successful'
     })
+
+    // Explicitly clear in response for consistent behavior across environments.
+    response.cookies.set({
+      name: 'auth-token',
+      value: '',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 0,
+      path: '/'
+    })
+
+    return response
 
   } catch (error) {
     console.error('Logout error:', error)
