@@ -77,53 +77,6 @@ type ManagerDashboardProps = {
   managerName?: string;
 };
 
-const INITIAL_STAFF: StaffMember[] = [
-  {
-    id: "w1",
-    name: "Harshil",
-    status: "On Floor",
-    zone: "Patio",
-    activeTables: 4,
-    revenue: 12450,
-    tips: 1890,
-    hours: 6.5,
-    tables: ["01", "04", "12", "15"],
-  },
-  {
-    id: "w2",
-    name: "Jordan",
-    status: "On Floor",
-    zone: "Main Hall",
-    activeTables: 3,
-    revenue: 9780,
-    tips: 1420,
-    hours: 5.75,
-    tables: ["03", "08", "10"],
-  },
-  {
-    id: "w3",
-    name: "Sana",
-    status: "On Break",
-    zone: "Lounge",
-    activeTables: 2,
-    revenue: 6510,
-    tips: 930,
-    hours: 4.25,
-    tables: ["05", "06"],
-  },
-  {
-    id: "w4",
-    name: "Mateo",
-    status: "Closing",
-    zone: "Private Dining",
-    activeTables: 2,
-    revenue: 7080,
-    tips: 1110,
-    hours: 7.1,
-    tables: ["17", "18"],
-  },
-];
-
 const INITIAL_TABLES: ManagerTable[] = [
   {
     id: "t1",
@@ -328,7 +281,7 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [tables, setTables] = useState<ManagerTable[]>([]);
-  const [staff] = useState<StaffMember[]>(INITIAL_STAFF);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<TableFilter>("All");
   const [openStaffId, setOpenStaffId] = useState<string | null>(null);
   const [openTableId, setOpenTableId] = useState<string | null>(null);
@@ -336,6 +289,8 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
   const [isShiftOpen, setIsShiftOpen] = useState(true);
   const [isLoadingTables, setIsLoadingTables] = useState(true);
   const [tablesError, setTablesError] = useState<string | null>(null);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(true);
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   // Map order status to table status for UI
   const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
@@ -421,6 +376,48 @@ export function ManagerDashboard({ managerName = "Avery" }: ManagerDashboardProp
     };
     
     fetchTablesAndOrders();
+  }, []);
+
+  // Fetch staff from API
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        setIsLoadingStaff(true);
+        setStaffError(null);
+        
+        const staffRes = await fetch('/api/staff');
+        
+        if (!staffRes.ok) {
+          throw new Error(`Failed to fetch staff: ${staffRes.status}`);
+        }
+        
+        const staffData = await staffRes.json();
+        const staffList = Array.isArray(staffData) ? staffData : staffData.data || [];
+        
+        // Transform staff records to ManagerDashboard StaffMember format
+        const transformedStaff = staffList.map((staffRecord: any) => ({
+          id: staffRecord.id,
+          name: staffRecord.name,
+          status: "On Floor" as StaffStatus, // Default status - can be enhanced with role-based logic
+          zone: staffRecord.role === 'manager' ? 'Office' : 'Main Hall', // Default zone based on role
+          activeTables: 0, // Will be calculated from table assignments if needed
+          revenue: 0, // Operational metric - would need order data
+          tips: 0, // Operational metric - would need order data
+          hours: 0, // Operational metric - would need shift tracking
+          tables: [], // Will be populated from table assignments if needed
+        } as StaffMember));
+        
+        setStaff(transformedStaff);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching staff';
+        setStaffError(errorMessage);
+        console.error('Failed to fetch staff:', error);
+      } finally {
+        setIsLoadingStaff(false);
+      }
+    };
+    
+    fetchStaff();
   }, []);
 
   const metrics = useMemo(() => {
