@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect, type ReactElement } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock } from "lucide-react";
+import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock, Receipt, ChefHat, CheckCircle2, ClipboardList, UserCheck, Wallet } from "lucide-react";
 import { useTheme } from "@/app/theme-provider";
 import { AdaptiveSlider } from "@/components/ui/adaptive-slider";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,16 +50,65 @@ type MenuItem = {
   price: number;
 };
 
+type MetricVariant = "neutral" | "success" | "danger" | "info";
+
+type MetricCardProps = {
+  label: string;
+  value: string | number;
+  variant: MetricVariant;
+  icon?: ReactElement;
+};
+
+type ShiftControlCardProps = {
+  shiftHours: number[];
+  isShiftActive: boolean;
+  isLoggingOut: boolean;
+  isOrderFormOpen: boolean;
+  resolvedTheme: string;
+  onLogout: () => void;
+  onToggleTheme: () => void;
+  onToggleOrderForm: () => void;
+  onToggleShift: () => void;
+  fillHeight?: boolean;
+};
+
 const DEFAULT_SHIFT_HOURS = [3, 34, 28];
+
+const SEARCH_INPUT_CLASS = "h-11 w-full rounded-lg border border-border/70 bg-card/60 px-4 pr-10 text-sm font-medium text-foreground shadow-xs outline-none transition-all focus:border-accent/60 focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60";
+const FIELD_INPUT_CLASS = "h-11 w-full rounded-lg border border-border/70 bg-background px-4 text-sm text-foreground placeholder-muted-foreground outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-accent";
 
 
 const statusColorMap: Record<TableStatus, string> = {
-  Seated: "border-blue-200/30 bg-blue-500/10 text-blue-300 dark:border-blue-400/30 dark:bg-blue-500/20 dark:text-blue-200",
-  "Order Taken": "border-amber-200/30 bg-amber-500/10 text-amber-300 dark:border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200",
-  "Dish Ready": "border-green-200/30 bg-green-500/10 text-green-300 dark:border-green-400/30 dark:bg-green-500/20 dark:text-green-200",
-  Served: "border-purple-200/30 bg-purple-500/10 text-purple-300 dark:border-purple-400/30 dark:bg-purple-500/20 dark:text-purple-200",
-  "Needs Bill": "border-red-200/30 bg-red-500/10 text-red-300 dark:border-red-400/30 dark:bg-red-500/20 dark:text-red-200",
+  Seated: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/40 dark:bg-blue-500/15 dark:text-blue-300",
+  "Order Taken": "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-300",
+  "Dish Ready": "border-green-400 bg-green-50 text-green-800 dark:border-green-400/40 dark:bg-green-500/15 dark:text-green-300",
+  Served: "border-purple-300 bg-purple-50 text-purple-700 dark:border-purple-400/40 dark:bg-purple-500/15 dark:text-purple-300",
+  "Needs Bill": "border-red-400 bg-red-50 text-red-700 dark:border-red-400/40 dark:bg-red-500/15 dark:text-red-300",
 };
+
+const STATUS_URGENCY: Record<TableStatus, number> = {
+  "Needs Bill": 0,
+  "Dish Ready": 1,
+  Served: 2,
+  "Order Taken": 3,
+  Seated: 4,
+};
+
+const statusIconMap: Record<TableStatus, ReactElement> = {
+  Seated: <UserCheck size={11} />,
+  "Order Taken": <ClipboardList size={11} />,
+  "Dish Ready": <ChefHat size={11} />,
+  Served: <CheckCircle2 size={11} />,
+  "Needs Bill": <Receipt size={11} />,
+};
+
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 function mapOrderStatusToTableStatus(orderStatus: OrderStatus | string): TableStatus {
   switch (orderStatus) {
@@ -76,6 +125,138 @@ function mapOrderStatusToTableStatus(orderStatus: OrderStatus | string): TableSt
     default:
       return 'Order Taken';
   }
+}
+
+function MetricCard({ label, value, variant, icon }: MetricCardProps) {
+  const variantClassMap: Record<MetricVariant, string> = {
+    neutral: "border-slate-200/80 bg-slate-50/80 text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200",
+    success: "border-emerald-200/70 bg-emerald-50/65 text-emerald-700 shadow-[0_1px_2px_rgba(5,150,105,0.08)] dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
+    danger: "border-rose-200/70 bg-rose-50/65 text-rose-700 shadow-[0_1px_2px_rgba(225,29,72,0.08)] dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+    info: "border-sky-200/70 bg-sky-50/65 text-sky-700 shadow-[0_1px_2px_rgba(14,165,233,0.08)] dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
+  };
+
+  return (
+    <motion.div
+      className={`rounded-xl border px-4 py-3.5 backdrop-blur-sm ${variantClassMap[variant]}`}
+      whileHover={{ y: -2 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    >
+      <p className="flex items-center gap-1.5 text-sm font-medium">
+        {icon}
+        {label}
+      </p>
+      <p className="mt-1.5 text-[2rem] font-semibold leading-none">{value}</p>
+    </motion.div>
+  );
+}
+
+function ShiftControlCard({
+  shiftHours,
+  isShiftActive,
+  isLoggingOut,
+  isOrderFormOpen,
+  resolvedTheme,
+  onLogout,
+  onToggleTheme,
+  onToggleOrderForm,
+  onToggleShift,
+  fillHeight = false,
+}: ShiftControlCardProps) {
+  return (
+    <motion.section
+      className={`rounded-2xl border border-border bg-card/90 px-5 py-5 shadow-sm backdrop-blur-sm ${fillHeight ? "h-full" : ""}`}
+      whileHover={{ scale: 1.01 }}
+      transition={{ type: "spring", stiffness: 320, damping: 22 }}
+    >
+      <div className={`flex flex-col gap-6 ${fillHeight ? "h-full" : ""}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Shift Control</span>
+            <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+              isShiftActive
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400"
+                : "border-amber-300 bg-amber-50 text-orange-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400"
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${isShiftActive ? "bg-emerald-500" : "bg-amber-500"}`} />
+              {isShiftActive ? "Shift active" : "Shift not started"}
+            </span>
+          </div>
+
+          <motion.button
+            type="button"
+            onClick={onLogout}
+            disabled={isLoggingOut}
+            className="mt-0.5 inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground/80 transition-colors hover:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <LogOut size={13} />
+            <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+          </motion.button>
+        </div>
+
+        <div className="flex justify-center">
+          <p className="text-center text-4xl font-bold leading-none tabular-nums tracking-tight text-foreground sm:text-[2.75rem]">
+            {shiftHours[0] ?? 0}h {String(shiftHours[1] ?? 0).padStart(2, "0")}m {String(shiftHours[2] ?? 0).padStart(2, "0")}s
+          </p>
+        </div>
+
+        <div className="border-t border-border/80" />
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <motion.button
+              type="button"
+              onClick={onToggleTheme}
+              className="flex h-11 w-11 items-center justify-center rounded-md border border-border bg-card text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+              aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+            >
+              {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </motion.button>
+
+            <motion.button
+              type="button"
+              onClick={onToggleOrderForm}
+              disabled={!isShiftActive || isLoggingOut}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-dashed border-border px-5 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:border-border/80 hover:bg-secondary/40 hover:text-foreground dark:hover:bg-secondary/30 disabled:cursor-not-allowed disabled:border-border/70 disabled:text-muted-foreground/60 disabled:opacity-100"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Plus size={16} />
+              {isOrderFormOpen ? "Close" : "New Order"}
+            </motion.button>
+          </div>
+
+          <motion.button
+            type="button"
+            onClick={onToggleShift}
+            disabled={isLoggingOut}
+            className={`w-full rounded-lg border-2 px-5 py-2 text-sm font-bold tracking-wide shadow-md ring-1 transition-all ${
+              isShiftActive
+                ? "border-red-700 bg-red-600 text-white ring-red-500/35 hover:bg-red-700"
+                : "border-slate-600 bg-slate-800 text-white ring-slate-500/35 hover:bg-slate-700"
+            } disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <span className="flex items-center justify-center gap-2">
+              <Clock className="size-4" />
+              {isShiftActive ? "End Shift" : "Start Shift"}
+            </span>
+          </motion.button>
+
+          {!isShiftActive && !isLoggingOut && (
+            <p className="pt-0.5 text-xs text-muted-foreground">
+              Start your shift to place new orders
+            </p>
+          )}
+        </div>
+      </div>
+    </motion.section>
+  );
 }
 
 export function WaiterDashboard({
@@ -399,138 +580,55 @@ export function WaiterDashboard({
 
   return (
     <main className="min-h-screen w-full bg-background dark:bg-linear-to-br dark:from-background dark:via-background dark:to-card">
-      <div className="mx-auto w-full max-w-7xl flex flex-col gap-8 p-4 sm:p-6 lg:p-8">
-          {/* Header Section */}
-          <header className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-4 flex-1">
-              <div>
-                <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-                  Good day, {displayName}
-                </h1>
-                <p className="text-muted-foreground mt-2">Manage your tables and shift performance</p>
-              </div>
-              
+      <div className="mx-auto w-full max-w-360 px-3 py-4 sm:px-4 sm:py-6 lg:px-6 lg:py-8">
+        <header className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
+            Good day, {displayName}
+          </h1>
+          <p className="mt-2 text-muted-foreground">Manage your tables and shift performance</p>
+        </header>
+
+        <div className="grid w-full gap-8 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+          <div className="min-w-0 space-y-8">
+            <section className="space-y-6">
               {/* Metrics Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <motion.div
-                  className="rounded-lg border border-border bg-card/50 backdrop-blur-sm px-4 py-3"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  <p className="text-xs text-muted-foreground font-medium">Active Tables</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{metrics.activeCount}</p>
-                </motion.div>
-                
-                <motion.div
-                  className="rounded-lg border border-border bg-card/50 backdrop-blur-sm px-4 py-3"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  <p className="text-xs text-muted-foreground font-medium">Dish Ready</p>
-                  <p className="text-2xl font-bold text-green-400 mt-1">{metrics.readyCount}</p>
-                </motion.div>
-                
-                <motion.div
-                  className="rounded-lg border border-border bg-card/50 backdrop-blur-sm px-4 py-3"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  <p className="text-xs text-muted-foreground font-medium">Needs Bill</p>
-                  <p className="text-2xl font-bold text-red-400 mt-1">{metrics.billCount}</p>
-                </motion.div>
-
-                <motion.div
-                  className="rounded-lg border border-border bg-card/50 backdrop-blur-sm px-4 py-3"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  <p className="text-xs text-muted-foreground font-medium">Shift Revenue</p>
-                  <p className="text-2xl font-bold text-accent mt-1">₹{metrics.revenue.toFixed(2)}</p>
-                </motion.div>
-              </div>
-            </div>
-
-            {/* Right Section */}
-            <div className="flex flex-col items-start xl:items-end gap-6">
-              <div className="flex flex-col gap-2">
-                <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Shift Hours</span>
-                <div className="flex items-center gap-2">
-                  {shiftHours.map((value, index) => (
-                    <motion.div
-                      key={`${value}-${index}`}
-                      className="h-12 w-12 rounded-lg border border-border bg-card/50 flex items-center justify-center
-                                 text-lg font-bold text-foreground backdrop-blur-sm"
-                      whileHover={{ scale: 1.05, backgroundColor: "var(--card)" }}
-                      transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                    >
-                      {value}
-                    </motion.div>
-                  ))}
-                </div>
+                <MetricCard label="Active Tables" value={metrics.activeCount} variant="neutral" />
+                <MetricCard
+                  label="Dishes Ready for Pickup"
+                  value={metrics.readyCount}
+                  variant="success"
+                  icon={<ChefHat size={11} />}
+                />
+                <MetricCard
+                  label="Waiting for Bill"
+                  value={metrics.billCount}
+                  variant="danger"
+                  icon={<Receipt size={11} />}
+                />
+                <MetricCard
+                  label="Shift Revenue"
+                  value={formatCurrency(metrics.revenue)}
+                  variant="info"
+                  icon={<Wallet size={11} />}
+                />
               </div>
 
-              <div className="grid w-full grid-cols-[3rem,1fr,auto] gap-3 sm:w-auto">
-                <motion.button
-                  type="button"
-                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-                  className="flex h-12 w-12 items-center justify-center rounded-md text-sm font-semibold transition-all
-                             bg-card border border-border text-foreground hover:bg-secondary dark:hover:bg-secondary/50"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
-                >
-                  {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-
-                </motion.button>
-
-                <motion.button
-                  type="button"
-                  onClick={() => setIsOrderFormOpen((prev) => !prev)}
-                  disabled={isLoggingOut}
-                  className="flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition-all
-                             bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed
-                             border border-primary/20"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Plus size={18} />
-                  {isOrderFormOpen ? "Close" : "New Order"}
-                </motion.button>
-
-                <motion.button
-                  type="button"
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                  className="flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition-all
-                             bg-card border border-border text-foreground hover:bg-secondary dark:hover:bg-secondary/50
-                             disabled:opacity-50 disabled:cursor-not-allowed"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <LogOut size={18} />
-                  <span className="hidden sm:inline">{isLoggingOut ? "Logging out..." : "Logout"}</span>
-                </motion.button>
-
-                <motion.button
-                  type="button"
-                  onClick={() => setIsShiftActive((prev) => !prev)}
-                  disabled={isLoggingOut}
-                  className={`col-span-3 w-full rounded-lg px-5 py-2 text-sm font-bold tracking-wide transition-all border-2 shadow-lg ring-1 ${
-                    isShiftActive
-                      ? "bg-red-500 border-red-600 text-white hover:bg-red-600 ring-red-400/40"
-                      : "bg-neutral-900 border-neutral-700 text-white hover:bg-black ring-neutral-600/40"
-                  } disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none`}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.99 }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    <Clock className="size-4" />
-                    {isShiftActive ? "End Shift" : "Start Shift"}
-                  </span>
-                </motion.button>
+              {/* Mobile Shift Control */}
+              <div className="w-full xl:hidden">
+                <ShiftControlCard
+                  shiftHours={shiftHours}
+                  isShiftActive={isShiftActive}
+                  isLoggingOut={isLoggingOut}
+                  isOrderFormOpen={isOrderFormOpen}
+                  resolvedTheme={resolvedTheme}
+                  onLogout={handleLogout}
+                  onToggleTheme={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                  onToggleOrderForm={() => setIsOrderFormOpen((prev) => !prev)}
+                  onToggleShift={() => setIsShiftActive((prev) => !prev)}
+                />
               </div>
-            </div>
-          </header>
+            </section>
 
           {/* New Order Modal */}
           <AnimatePresence>
@@ -569,12 +667,13 @@ export function WaiterDashboard({
                           }}
                           disabled={allTables.length === 0}
                           placeholder={allTables.length === 0 ? 'No tables configured' : 'Search table number'}
-                          className="h-11 w-full rounded-xl border border-border/70 bg-card/60 px-4 pr-10 text-sm font-medium text-foreground shadow-xs outline-none transition-all focus:border-accent/60 focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
+                          className={SEARCH_INPUT_CLASS}
                         />
                         <button
                           type="button"
                           onClick={() => setIsTableDropdownOpen((prev) => !prev)}
                           className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80"
+                          aria-expanded={isTableDropdownOpen}
                           aria-label="Toggle table suggestions"
                         >
                           <ChevronRight className={`size-4 transition-transform ${isTableDropdownOpen ? 'rotate-90' : '-rotate-90'}`} />
@@ -610,8 +709,7 @@ export function WaiterDashboard({
                         value={newOrder.guests}
                         onChange={(event) => setNewOrder((prev) => ({ ...prev, guests: event.target.value.replace(/\D/g, "") }))}
                         placeholder="2"
-                        className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground
-                                 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-accent"
+                        className={FIELD_INPUT_CLASS}
                       />
                     </div>
 
@@ -621,8 +719,7 @@ export function WaiterDashboard({
                         value={newOrder.notes}
                         onChange={(event) => setNewOrder((prev) => ({ ...prev, notes: event.target.value }))}
                         placeholder="Birthday celebration, allergies..."
-                        className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground
-                                 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-accent"
+                        className={FIELD_INPUT_CLASS}
                       />
                     </div>
 
@@ -648,12 +745,13 @@ export function WaiterDashboard({
                                   ? "No dishes available"
                                   : "Search dish name"
                             }
-                            className="h-11 w-full rounded-xl border border-border/70 bg-card/60 px-4 pr-10 text-sm font-medium text-foreground shadow-xs outline-none transition-all focus:border-accent/60 focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
+                            className={SEARCH_INPUT_CLASS}
                           />
                           <button
                             type="button"
                             onClick={() => setIsDishDropdownOpen((prev) => !prev)}
                             className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80"
+                            aria-expanded={isDishDropdownOpen}
                             aria-label="Toggle dish suggestions"
                           >
                             <ChevronRight className={`size-4 transition-transform ${isDishDropdownOpen ? 'rotate-90' : '-rotate-90'}`} />
@@ -758,7 +856,7 @@ export function WaiterDashboard({
           <section className="space-y-6">
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground">Active Tables</h2>
-              <p className="text-muted-foreground mt-1">Tap a table to view details and manage orders</p>
+              <p className="text-muted-foreground mt-1">Select a table to manage orders</p>
             </div>
 
             {logoutError && (
@@ -795,19 +893,23 @@ export function WaiterDashboard({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border border-border/50 bg-card/50 px-4 py-3 text-center"
+                className="rounded-xl border border-border/50 bg-card/50 py-12 text-center"
               >
-                <p className="text-sm text-muted-foreground font-medium">No active orders yet</p>
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card">
+                  <ClipboardList className="size-5 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No active tables</p>
+                <p className="mt-1 text-xs text-muted-foreground">New orders will appear here once placed</p>
               </motion.div>
             )}
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {tables.map((table) => (
+              {[...tables].sort((a, b) => STATUS_URGENCY[a.status] - STATUS_URGENCY[b.status]).map((table) => (
                 <motion.button
                   key={table.id}
                   type="button"
                   onClick={() => setOpenTableId(table.id)}
-                  className="relative aspect-square rounded-xl border border-border bg-white transition-all hover:bg-white overflow-hidden group"
+                  className="group relative aspect-square cursor-pointer overflow-hidden rounded-xl border border-border bg-card/90 transition-all hover:border-border/80 hover:shadow-md dark:bg-card/70"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
@@ -816,18 +918,20 @@ export function WaiterDashboard({
                       {table.tableNumber}
                     </div>
                     <div className="flex flex-col items-center gap-2 w-full">
-                      <span className={`inline-flex items-center justify-center rounded-md border px-2.5 py-1 text-xs font-semibold text-center ${statusColorMap[table.status]}`}>
+                      <span className={`inline-flex items-center justify-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold text-center ${statusColorMap[table.status]}`}>
+                        {statusIconMap[table.status]}
                         {table.status}
                       </span>
-                      <div className="text-xs text-muted-foreground font-medium">
+                      <div className="text-xs text-foreground/70 font-semibold">
                         {table.guests} {table.guests === 1 ? "guest" : "guests"}
                       </div>
                     </div>
                   </div>
                   
                   {/* Hover indicator */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl backdrop-blur-sm">
-                    <ChevronRight className="text-white" size={24} />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-xl backdrop-blur-sm">
+                    <ChevronRight className="text-white" size={22} />
+                    <span className="text-white text-xs font-semibold">Manage</span>
                   </div>
                 </motion.button>
               ))}
@@ -877,7 +981,8 @@ export function WaiterDashboard({
                       <div className="space-y-3">
                         <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Current Status</label>
                         <div className="w-full px-4 py-3 rounded-lg border border-border bg-background/50 text-foreground font-medium text-base">
-                          <span className={`inline-flex items-center justify-center rounded-md border px-2.5 py-1 text-xs font-semibold ${statusColorMap[openTable.status]}`}>
+                          <span className={`inline-flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold ${statusColorMap[openTable.status]}`}>
+                            {statusIconMap[openTable.status]}
                             {openTable.status}
                           </span>
                         </div>
@@ -946,6 +1051,25 @@ export function WaiterDashboard({
               </div>
             )}
           </AnimatePresence>
+        </div>
+
+        <aside className="hidden xl:block xl:self-start">
+          <div className="xl:sticky xl:top-6 xl:h-[calc(100vh-136px)] xl:min-h-128">
+            <ShiftControlCard
+              shiftHours={shiftHours}
+              isShiftActive={isShiftActive}
+              isLoggingOut={isLoggingOut}
+              isOrderFormOpen={isOrderFormOpen}
+              resolvedTheme={resolvedTheme}
+              onLogout={handleLogout}
+              onToggleTheme={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              onToggleOrderForm={() => setIsOrderFormOpen((prev) => !prev)}
+              onToggleShift={() => setIsShiftActive((prev) => !prev)}
+              fillHeight
+            />
+          </div>
+        </aside>
+        </div>
       </div>
 
       {/* Qty Picker Bottom Sheet */}
@@ -966,7 +1090,7 @@ export function WaiterDashboard({
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
-              className="fixed bottom-0 left-0 right-0 z-71 flex flex-col items-center gap-4 rounded-t-3xl bg-[#FEFEFE] px-6 pb-8 pt-4 shadow-2xl dark:bg-neutral-900"
+              className="fixed bottom-0 left-0 right-0 z-71 flex flex-col items-center gap-4 rounded-t-3xl bg-background px-6 pb-8 pt-4 shadow-2xl"
             >
               <div className="h-1 w-10 rounded-full bg-border" />
               <p className="text-sm font-semibold text-muted-foreground tracking-widest uppercase">Select Quantity</p>

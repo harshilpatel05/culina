@@ -8,7 +8,7 @@ type CreateOrderItemInput = {
   quantity: number
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
   const token = cookieStore.get('auth-token')?.value
@@ -23,10 +23,27 @@ export async function GET() {
     return NextResponse.json({ error: 'Invalid session context' }, { status: 401 })
   }
 
+  const { searchParams } = new URL(request.url)
+  const tableId = searchParams.get('table_id')
+  const status = searchParams.get('status')
+  const paymentStatus = searchParams.get('payment_status')
+
   let query = supabase
     .from('orders')
     .select('*, customers(name), restaurant_tables(table_number), staff(name), restaurants(name), order_items(dish_id, quantity, price, prep_time, dishes(name))')
     .eq('restaurant_id', payload.restaurant_id)
+
+  if (tableId) {
+    query = query.eq('table_id', tableId)
+  }
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  if (paymentStatus) {
+    query = query.eq('payment_status', paymentStatus)
+  }
 
   // Waiter/staff dashboards should only see their own active tables.
   if (payload.role === 'staff' || payload.role === 'waiter') {
@@ -49,7 +66,7 @@ export async function GET() {
       .in('status', ['placed', 'preparing', 'served'])
   }
 
-  const { data, error } = await query
+  const { data, error } = await query.order('order_time', { ascending: false })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

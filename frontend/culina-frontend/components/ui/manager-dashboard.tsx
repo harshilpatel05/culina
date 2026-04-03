@@ -110,19 +110,21 @@ const TREND_DATA: TrendPoint[] = [
 ];
 
 const FILTERS: TableFilter[] = ["All", "Unoccupied", "Order Taken", "Dish Ready", "Served", "Needs Bill"];
+const DASHBOARD_SHELL = "rounded-2xl border border-slate-300/90 bg-card/55 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] backdrop-blur-sm dark:border-slate-500/80";
+const SOFT_INSET_CARD = "rounded-xl border border-border/80 bg-card/40";
 
 const statusColorMap: Record<TableStatus, string> = {
-  Unoccupied: "border-slate-200/30 bg-slate-500/10 text-slate-300 dark:border-slate-400/30 dark:bg-slate-500/20 dark:text-slate-200",
-  "Order Taken": "border-amber-200/30 bg-amber-500/10 text-amber-300 dark:border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200",
-  "Dish Ready": "border-green-200/30 bg-green-500/10 text-green-300 dark:border-green-400/30 dark:bg-green-500/20 dark:text-green-200",
-  Served: "border-purple-200/30 bg-purple-500/10 text-purple-300 dark:border-purple-400/30 dark:bg-purple-500/20 dark:text-purple-200",
-  "Needs Bill": "border-red-200/30 bg-red-500/10 text-red-300 dark:border-red-400/30 dark:bg-red-500/20 dark:text-red-200",
+  Unoccupied: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-400/30 dark:bg-slate-500/20 dark:text-slate-200",
+  "Order Taken": "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200",
+  "Dish Ready": "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/20 dark:text-emerald-200",
+  Served: "border-violet-300 bg-violet-100 text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/20 dark:text-violet-200",
+  "Needs Bill": "border-rose-300 bg-rose-100 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/20 dark:text-rose-200",
 };
 
 const staffStatusColorMap: Record<StaffStatus, string> = {
-  "On Floor": "border-emerald-200/30 bg-emerald-500/10 text-emerald-300 dark:border-emerald-400/30 dark:bg-emerald-500/20 dark:text-emerald-200",
-  "On Break": "border-amber-200/30 bg-amber-500/10 text-amber-300 dark:border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200",
-  Closing: "border-slate-200/30 bg-slate-500/10 text-slate-300 dark:border-slate-400/30 dark:bg-slate-500/20 dark:text-slate-200",
+  "On Floor": "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/20 dark:text-emerald-200",
+  "On Break": "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/20 dark:text-amber-200",
+  Closing: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-400/30 dark:bg-slate-500/20 dark:text-slate-200",
 };
 
 const chartConfig = {
@@ -171,6 +173,61 @@ function getOrderPrepMinutes(orderItems: ApiOrderItem[] | undefined, fallbackPer
   return Array.from(uniqueDishPrep.values()).reduce((sum, minutes) => sum + minutes, 0);
 }
 
+function StatusBadge({ label, className }: { label: string; className: string }) {
+  return (
+    <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function InfoStatCard({ label, value, accentClassName = "text-foreground" }: { label: string; value: string | number; accentClassName?: string }) {
+  return (
+    <div className="rounded-lg border border-border/80 bg-card/50 px-3 py-2">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-1 font-semibold ${accentClassName}`}>{value}</p>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "neutral" | "success" | "danger" | "info" | "accent";
+}) {
+  const toneMap = {
+    neutral: "border-slate-200/70 bg-slate-50/80 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200",
+    success: "border-emerald-200/70 bg-emerald-50/70 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
+    danger: "border-rose-200/70 bg-rose-50/70 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+    info: "border-sky-200/70 bg-sky-50/70 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
+    accent: "border-indigo-200/70 bg-indigo-50/70 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300",
+  } as const;
+
+  return (
+    <motion.div
+      className={`mx-auto w-full max-w-55 rounded-2xl border px-5 py-5 text-center shadow-[0_2px_8px_rgba(15,23,42,0.08)] backdrop-blur-sm ${toneMap[tone]}`}
+      whileHover={{ y: -2 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    >
+      <div className="flex flex-col items-center gap-2.5">
+        <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/65">
+          <Icon className="size-4.5 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="mt-1 text-3xl font-semibold leading-none">{value}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -188,6 +245,8 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const [tablesError, setTablesError] = useState<string | null>(null);
   const [isLoadingStaff, setIsLoadingStaff] = useState(true);
   const [staffError, setStaffError] = useState<string | null>(null);
+  const [isOpeningBilling, setIsOpeningBilling] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   // Map order status to table status for UI
   const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
@@ -382,18 +441,53 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
 
   const openTableDetails = (tableId: string) => {
     setOpenStaffId(null);
+    setBillingError(null);
     setOpenTableId(tableId);
   };
 
-  const handleBilling = () => {
+  const handleBilling = async () => {
     if (!openTableId) {
       return;
     }
 
-    setTables((previous) =>
-      previous.map((table) => (table.id === openTableId ? { ...table, status: "Served" } : table))
-    );
-    setOpenTableId(null);
+    try {
+      setIsOpeningBilling(true);
+      setBillingError(null);
+
+      const searchParams = new URLSearchParams({
+        table_id: openTableId,
+      });
+
+      const response = await fetch(`/api/orders?${searchParams.toString()}`);
+
+      if (!response.ok) {
+        const responseBody = await response.json().catch(() => null);
+        throw new Error(responseBody?.error ?? 'Could not resolve billable order for this table.')
+      }
+
+      const orders = await response.json();
+      const billableStatuses = new Set(['served', 'completed']);
+      const unpaidStatuses = new Set(['', 'pending', 'unpaid', 'partial']);
+      const latestOrder = Array.isArray(orders)
+        ? orders.find((order) => {
+            const normalizedStatus = String(order?.status ?? '').toLowerCase();
+            const normalizedPaymentStatus = String(order?.payment_status ?? '').toLowerCase();
+            return billableStatuses.has(normalizedStatus) && unpaidStatuses.has(normalizedPaymentStatus);
+          })
+        : null;
+
+      if (!latestOrder?.id) {
+        throw new Error('No pending bill found for this table.');
+      }
+
+      setOpenTableId(null);
+      router.push(`/billing/${latestOrder.id}`);
+    } catch (billingErr) {
+      const message = billingErr instanceof Error ? billingErr.message : 'Failed to open billing page.';
+      setBillingError(message);
+    } finally {
+      setIsOpeningBilling(false);
+    }
   };
 
   const handleSidebarNav = (label: string) => {
@@ -436,7 +530,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   };
 
   return (
-    <main className="min-h-screen w-full bg-white">
+    <main className="min-h-screen w-full bg-background dark:bg-linear-to-br dark:from-background dark:via-background dark:to-card">
       <MacOSSidebar
           items={[
             { label: "Dashboard", icon: <LayoutDashboard className="size-4" /> },
@@ -449,11 +543,11 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
           onItemClick={handleSidebarNav}
           className="w-full max-w-384 p-1 sm:p-2 lg:p-4"
         >
-      <div className="flex w-full flex-col gap-8 pl-3 sm:pl-4 lg:pl-5">
-        <header className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="flex-1 space-y-4">
+      <div className="flex w-full flex-col gap-8 px-2 sm:px-4 lg:px-6">
+        <header className="space-y-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
                 Floor command, {displayManagerName}
               </h1>
               <p className="mt-2 text-muted-foreground">
@@ -461,50 +555,11 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-              {[
-                { label: "Active Tables", value: metrics.activeTables, accent: "text-foreground", icon: Activity },
-                { label: "Dish Ready", value: metrics.readyCount, accent: "text-green-400", icon: Briefcase },
-                { label: "Needs Bill", value: metrics.billCount, accent: "text-red-400", icon: Wallet },
-                { label: "On Duty", value: metrics.onDuty, accent: "text-sky-400", icon: Users },
-                { label: "Shift Revenue", value: formatCurrency(metrics.revenue), accent: "text-accent", icon: Wallet },
-              ].map((item) => (
-                <motion.div
-                  key={item.label}
-                  className="rounded-lg border border-border bg-card/50 px-4 py-3 backdrop-blur-sm"
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 12 }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
-                      <p className={`mt-1 text-2xl font-bold ${item.accent}`}>{item.value}</p>
-                    </div>
-                    <item.icon className="mt-1 size-4 text-muted-foreground" />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex w-full flex-col items-start gap-4 sm:w-[24rem] xl:items-end">
-            <div className="w-full rounded-xl border border-border bg-card/50 px-4 py-3 backdrop-blur-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Shift State</p>
-              <div className="mt-3 flex items-center gap-3">
-                <span className={`inline-flex rounded-md border px-3 py-1 text-xs font-semibold ${isShiftOpen ? staffStatusColorMap["On Floor"] : staffStatusColorMap.Closing}`}>
-                  {isShiftOpen ? "Service Live" : "Closing Mode"}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  Peak lead: {performanceLead?.name ?? "-"}
-                </span>
-              </div>
-            </div>
-
-            <div className="grid w-full grid-cols-[3rem_1fr_auto] gap-3">
+            <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1 xl:w-auto xl:flex-nowrap">
               <motion.button
                 type="button"
                 onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-                className="flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
+                className="flex h-12 w-12 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
@@ -516,7 +571,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 type="button"
                 onClick={() => setIsShiftOpen((current) => !current)}
                 disabled={isLoggingOut}
-                className={`rounded-md border px-5 py-3 text-sm font-semibold transition-all ${
+                className={`rounded-lg border px-4 py-3 text-sm font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.12)] transition-all ${
                   isShiftOpen
                     ? "border-red-500/30 bg-red-500 text-white hover:bg-red-600"
                     : "border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -531,7 +586,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 type="button"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
+                className="flex items-center justify-center gap-2 rounded-lg border border-border/80 bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
@@ -539,6 +594,15 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 <span className="hidden sm:inline">{isLoggingOut ? "Logging out..." : "Logout"}</span>
               </motion.button>
             </div>
+
+          </div>
+
+          <div className="grid grid-cols-1 justify-items-center gap-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 xl:gap-2">
+            <MetricCard label="Active Tables" value={metrics.activeTables} icon={Activity} tone="neutral" />
+            <MetricCard label="Dish Ready" value={metrics.readyCount} icon={Briefcase} tone="success" />
+            <MetricCard label="Needs Bill" value={metrics.billCount} icon={Wallet} tone="danger" />
+            <MetricCard label="On Duty" value={metrics.onDuty} icon={Users} tone="info" />
+            <MetricCard label="Shift Revenue" value={formatCurrency(metrics.revenue)} icon={Wallet} tone="accent" />
           </div>
         </header>
 
@@ -553,7 +617,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
         )}
 
         <section className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
-          <div className="space-y-4 rounded-2xl border border-border bg-card/50 p-5 backdrop-blur-sm">
+          <div className={`${DASHBOARD_SHELL} space-y-4`}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div className="p-2">
                 <h2 className="text-2xl font-bold tracking-tight text-foreground">Staff Overview</h2>
@@ -568,17 +632,15 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   key={member.id}
                   type="button"
                   onClick={() => setOpenStaffId(member.id)}
-                  className="group rounded-xl border border-border bg-background/45 p-4 text-left transition-all hover:border-accent/40 hover:bg-background/70"
-                  whileHover={{ scale: 1.01 }}
+                  className="group rounded-xl border border-border/80 bg-card/40 p-4 text-left transition-all hover:border-accent/40 hover:bg-card/60"
+                  whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.99 }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg font-semibold text-foreground">{member.name}</h3>
-                        <span className={`inline-flex rounded-md border px-2 py-1 text-[11px] font-semibold ${staffStatusColorMap[member.status]}`}>
-                          {member.status}
-                        </span>
+                        <StatusBadge label={member.status} className={staffStatusColorMap[member.status]} />
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">{member.zone}</p>
                     </div>
@@ -586,29 +648,17 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Tables</p>
-                      <p className="mt-1 font-semibold text-foreground">{member.activeTables}</p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Hours</p>
-                      <p className="mt-1 font-semibold text-foreground">{member.hours.toFixed(1)}h</p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Revenue</p>
-                      <p className="mt-1 font-semibold text-accent">{formatCurrency(member.revenue)}</p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Tips</p>
-                      <p className="mt-1 font-semibold text-foreground">{formatCurrency(member.tips)}</p>
-                    </div>
+                    <InfoStatCard label="Tables" value={member.activeTables} />
+                    <InfoStatCard label="Hours" value={`${member.hours.toFixed(1)}h`} />
+                    <InfoStatCard label="Revenue" value={formatCurrency(member.revenue)} accentClassName="text-accent" />
+                    <InfoStatCard label="Tips" value={formatCurrency(member.tips)} />
                   </div>
                 </motion.button>
               ))}
             </div>
           </div>
 
-          <div className="space-y-4 rounded-2xl border border-border bg-card/50 p-5 backdrop-blur-sm">
+          <div className={`${DASHBOARD_SHELL} space-y-4`}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold tracking-tight text-foreground">Revenue Pace</h2>
@@ -645,7 +695,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 { label: "Avg Ticket", value: formatCurrency(Math.round(metrics.revenue / metrics.activeTables || 0)) },
                 { label: "Table Load", value: `${Math.round(metrics.activeTables / Math.max(metrics.onDuty, 1))} / staff` },
               ].map((item) => (
-                <div key={item.label} className="rounded-lg border border-border bg-background/45 px-3 py-3">
+                <div key={item.label} className={`${SOFT_INSET_CARD} px-3 py-3`}>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
                   <p className="mt-1 text-sm font-semibold text-foreground">{item.value}</p>
                 </div>
@@ -654,7 +704,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
           </div>
         </section>
 
-        <section className="space-y-5 rounded-2xl border border-border bg-card/50 p-5 backdrop-blur-sm">
+        <section className={`${DASHBOARD_SHELL} space-y-5`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Table Operations Board</h2>
@@ -718,16 +768,14 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   key={table.id}
                   type="button"
                   onClick={() => openTableDetails(table.id)}
-                  className="group relative overflow-hidden rounded-xl border border-border bg-background/45 p-4 text-left transition-all hover:border-accent/40"
-                  whileHover={{ scale: 1.02 }}
+                  className="group relative overflow-hidden rounded-xl border border-border/80 bg-card/40 p-4 text-left transition-all hover:border-accent/40 hover:bg-card/60"
+                  whileHover={{ y: -2 }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-current bg-background/60 text-xl font-bold text-foreground">
                       {table.tableNumber}
                     </div>
-                    <span className={`inline-flex rounded-md border px-2 py-1 text-[11px] font-semibold ${statusColorMap[table.status]}`}>
-                      {table.status}
-                    </span>
+                    <StatusBadge label={table.status} className={statusColorMap[table.status]} />
                   </div>
 
                   <div className="mt-4 space-y-2">
@@ -782,29 +830,29 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 </div>
 
                 <div className="grid gap-4 p-6 sm:grid-cols-2">
-                  <div className="rounded-xl border border-border bg-background/45 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
-                    <span className={`mt-2 inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${statusColorMap[openTable.status]}`}>
-                      {openTable.status}
-                    </span>
+                    <div className="mt-2">
+                      <StatusBadge label={openTable.status} className={statusColorMap[openTable.status]} />
+                    </div>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-background/45 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Guests</p>
                     <p className="mt-2 text-lg font-semibold text-foreground">{openTable.guests}</p>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-background/45 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Running Total</p>
                     <p className="mt-2 text-lg font-semibold text-accent">{formatCurrency(openTable.runningTotal)}</p>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-background/45 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Elapsed</p>
                     <p className="mt-2 text-lg font-semibold text-foreground">{openTable.elapsedMinutes} min</p>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-background/45 p-4 sm:col-span-2">
+                  <div className="rounded-xl border border-border/80 bg-card/40 p-4 sm:col-span-2">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Order Items</p>
                     {openTable.orderItems.length === 0 ? (
                       <p className="mt-3 text-sm text-muted-foreground">No items added yet.</p>
@@ -825,13 +873,16 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 </div>
 
                 <div className="flex items-center justify-between gap-3 border-t border-border bg-card/60 px-6 py-4">
-                  <p className="text-sm text-muted-foreground">Complete billing to close the payment step for this table.</p>
+                  <p className={`text-sm ${billingError ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {billingError ?? 'Complete billing to close the payment step for this table.'}
+                  </p>
                   <button
                     type="button"
                     onClick={handleBilling}
+                    disabled={isOpeningBilling}
                     className="rounded-lg border border-primary/20 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90"
                   >
-                    Billing
+                    {isOpeningBilling ? "Opening..." : "Billing"}
                   </button>
                 </div>
               </motion.section>
@@ -861,9 +912,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-3xl font-bold text-foreground">{selectedStaff.name}</h3>
-                      <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${staffStatusColorMap[selectedStaff.status]}`}>
-                        {selectedStaff.status}
-                      </span>
+                      <StatusBadge label={selectedStaff.status} className={staffStatusColorMap[selectedStaff.status]} />
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">{selectedStaff.zone} zone oversight</p>
                   </div>
@@ -885,25 +934,25 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-xl border border-border bg-background/45 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Hours</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">{selectedStaff.hours.toFixed(1)}h</p>
                       </div>
-                      <div className="rounded-xl border border-border bg-background/45 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Tables</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">{selectedStaff.activeTables}</p>
                       </div>
-                      <div className="rounded-xl border border-border bg-background/45 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Revenue</p>
                         <p className="mt-2 text-lg font-semibold text-accent">{formatCurrency(selectedStaff.revenue)}</p>
                       </div>
-                      <div className="rounded-xl border border-border bg-background/45 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Tips</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">{formatCurrency(selectedStaff.tips)}</p>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border bg-background/45 p-5">
+                    <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Assigned Tables</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {selectedStaff.tables.map((tableNumber) => (
@@ -917,7 +966,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border bg-background/45 p-5">
+                    <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Manager Note</p>
                       <p className="mt-3 text-sm leading-6 text-muted-foreground">
                         Strong pacing on high-value tables. Keep an eye on bill delays and reassign if patio wait time exceeds 10 minutes.
@@ -925,7 +974,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-background/45 p-5">
+                  <div className="rounded-xl border border-border/80 bg-card/40 p-5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <h4 className="text-xl font-semibold text-foreground">Active Service Snapshot</h4>
@@ -957,9 +1006,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                             >
                               <TableCell className="font-medium text-foreground">{table.tableNumber}</TableCell>
                               <TableCell>
-                                <span className={`inline-flex rounded-md border px-2 py-1 text-[11px] font-semibold ${statusColorMap[table.status]}`}>
-                                  {table.status}
-                                </span>
+                                <StatusBadge label={table.status} className={statusColorMap[table.status]} />
                               </TableCell>
                               <TableCell>{table.guests}</TableCell>
                               <TableCell>{formatCurrency(table.runningTotal)}</TableCell>
