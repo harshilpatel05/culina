@@ -230,7 +230,7 @@ export function WaiterDashboard({
   };
 
   return (
-    <main className="min-h-screen w-full bg-background dark:bg-gradient-to-br dark:from-background dark:via-background dark:to-card">
+    <main className="min-h-screen w-full bg-background dark:bg-linear-to-br dark:from-background dark:via-background dark:to-card">
       <div className="mx-auto w-full max-w-7xl flex flex-col gap-8 p-4 sm:p-6 lg:p-8">
           {/* Header Section */}
           <header className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
@@ -533,13 +533,7 @@ export function WaiterDashboard({
                   key={table.id}
                   type="button"
                   onClick={() => setOpenTableId(table.id)}
-                  className={`relative aspect-square rounded-xl border transition-all
-                             ${table.status === "Dish Ready" ? "border-green-400/50 bg-green-500/10 hover:bg-green-500/15" :
-                               table.status === "Needs Bill" ? "border-red-400/50 bg-red-500/10 hover:bg-red-500/15" :
-                               table.status === "Order Taken" ? "border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/15" :
-                               table.status === "Seated" ? "border-blue-400/50 bg-blue-500/10 hover:bg-blue-500/15" :
-                               "border-border bg-card/50 hover:bg-card"}
-                             overflow-hidden group`}
+                  className="relative aspect-square rounded-xl border border-border bg-white transition-all hover:bg-white overflow-hidden group"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
@@ -585,7 +579,7 @@ export function WaiterDashboard({
                     exit={{ opacity: 0, scale: 0.85, y: 40 }}
                     transition={{ type: "spring", damping: 25, stiffness: 300, mass: 0.8 }}
                     className="pointer-events-auto w-full rounded-2xl border border-border overflow-hidden
-                               bg-gradient-to-b from-card to-card/95 shadow-2xl"
+                               bg-linear-to-b from-card to-card/95 shadow-2xl"
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 py-5 border-b border-border">
