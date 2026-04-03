@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, Boxes, Building2, LayoutDashboard, Pencil, Plus, Trash2, Users } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MacOSSidebar } from "@/components/ui/macos-sidebar-base";
 
 type Restaurant = {
   id: string;
@@ -98,6 +100,7 @@ function formatDate(value: string | null) {
 }
 
 export default function ManagerStaffPage() {
+  const router = useRouter();
   const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -284,8 +287,43 @@ export default function ManagerStaffPage() {
     }
   };
 
+  const handleSidebarNav = (label: string) => {
+    switch (label) {
+      case "Dashboard":
+        router.push("/manager-dash");
+        break;
+      case "Staff":
+        router.push("/manager-dash/staff");
+        break;
+      case "Inventory":
+        router.push("/manager-dash/inventory");
+        break;
+      case "Recipe":
+        router.push("/manager-dash/recipe");
+        break;
+      case "Restaurant":
+        router.push("/manager-dash/restaurant");
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
-    <main className="min-h-screen w-full bg-background dark:bg-linear-to-br dark:from-background dark:via-background dark:to-card">
+    <main className="min-h-screen w-full bg-white">
+      <MacOSSidebar
+        items={[
+          { label: "Dashboard", icon: <LayoutDashboard className="size-4" /> },
+          { label: "Staff", icon: <Users className="size-4" /> },
+          { label: "Inventory", icon: <Boxes className="size-4" /> },
+          { label: "Recipe", icon: <BookOpen className="size-4" /> },
+          { label: "Restaurant", icon: <Building2 className="size-4" /> },
+        ]}
+        defaultOpen={false}
+        onItemClick={handleSidebarNav}
+        className="w-full max-w-384 p-1 sm:p-2 lg:p-4"
+      >
+      <div className="flex w-full flex-col gap-6 pl-3 sm:pl-4 lg:pl-5">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
         <header className="rounded-3xl border border-border/60 bg-card/70 p-6 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -559,6 +597,8 @@ export default function ManagerStaffPage() {
           ) : null}
         </AnimatePresence>
       </div>
+      </div>
+      </MacOSSidebar>
     </main>
   );
 }
