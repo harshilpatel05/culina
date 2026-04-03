@@ -35,15 +35,28 @@ export async function PUT(
   const validRoles = ['manager', 'chef', 'waiter']
   const status = validStatus.includes(body.status) ? body.status : 'inactive'
   const role = validRoles.includes(body.role) ? body.role : null
+  const updatePayload: {
+    staff_id: string | null
+    name: string | null
+    role: string | null
+    salary: number | null
+    status: string
+    password?: string
+  } = {
+    staff_id: body.staff_id ?? null,
+    name: body.name,
+    role,
+    salary: body.salary,
+    status
+  }
+
+  if (body.password) {
+    updatePayload.password = body.password
+  }
 
   const { data, error } = await supabase
     .from('staff')
-    .update({
-      name: body.name,
-      role,
-      salary: body.salary,
-      status
-    })
+    .update(updatePayload)
     .eq('id', id)
     .select()
 

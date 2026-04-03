@@ -29,10 +29,12 @@ export async function POST(req: Request) {
   const { data, error } = await supabase
     .from('staff')
     .insert({
+      staff_id: body.staff_id,
       restaurant_id: body.restaurant_id,
       name: body.name,
       role,
       salary: body.salary,
+      password: body.password,
       status
     })
     .select()

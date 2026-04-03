@@ -24,6 +24,7 @@ type StaffStatus = "active" | "holiday" | "inactive";
 
 type StaffRecord = {
   id: string;
+  staff_id: string | null;
   restaurant_id: string | null;
   name: string | null;
   role: StaffRole | null;
@@ -36,17 +37,21 @@ type StaffRecord = {
 };
 
 type StaffFormState = {
+  staffId: string;
   name: string;
   role: StaffRole | "";
   salary: string;
+  password: string;
   status: StaffStatus;
   restaurantId: string;
 };
 
 const EMPTY_FORM: StaffFormState = {
+  staffId: "",
   name: "",
   role: "",
   salary: "",
+  password: "",
   status: "inactive",
   restaurantId: "",
 };
@@ -150,10 +155,12 @@ export default function ManagerStaffPage() {
 
     return staff.filter((member) => {
       const name = member.name?.toLowerCase() ?? "";
+      const staffId = member.staff_id?.toLowerCase() ?? "";
       const role = member.role?.toLowerCase() ?? "";
       const restaurant = member.restaurants?.name?.toLowerCase() ?? "";
       const status = member.status?.toLowerCase() ?? "";
       return (
+        staffId.includes(normalizedQuery) ||
         name.includes(normalizedQuery) ||
         role.includes(normalizedQuery) ||
         restaurant.includes(normalizedQuery) ||
@@ -195,9 +202,11 @@ export default function ManagerStaffPage() {
   const openEdit = (member: StaffRecord) => {
     setEditingId(member.id);
     setForm({
+      staffId: member.staff_id ?? "",
       name: member.name ?? "",
       role: member.role ?? "",
       salary: member.salary != null ? String(member.salary) : "",
+      password: "",
       status: member.status ?? "inactive",
       restaurantId: member.restaurant_id ?? "",
     });
@@ -207,8 +216,13 @@ export default function ManagerStaffPage() {
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!form.name.trim() || !form.role.trim()) {
-      setError("Name and role are required.");
+    if (!form.staffId.trim() || !form.name.trim() || !form.role.trim()) {
+      setError("Staff ID, name, and role are required.");
+      return;
+    }
+
+    if (!editingId && !form.password.trim()) {
+      setError("Password is required when creating a staff member.");
       return;
     }
 
@@ -233,10 +247,12 @@ export default function ManagerStaffPage() {
       setError(null);
 
       const payload = {
+        staff_id: form.staffId.trim(),
         restaurant_id: form.restaurantId || null,
         name: form.name.trim(),
         role: form.role,
         salary: parsedRate,
+        password: form.password.trim() || undefined,
         status: form.status,
       };
 
@@ -331,7 +347,7 @@ export default function ManagerStaffPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">Manager Console</p>
               <h1 className="text-3xl font-semibold tracking-tight text-foreground">Staff Management</h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Manage your team, track salary and status, and keep each restaurant staffed with the right roles.
+                Manage your team, assign staff IDs, track salary and status, and keep each restaurant staffed with the right roles.
               </p>
             </div>
             <button
@@ -369,7 +385,7 @@ export default function ManagerStaffPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by name, role, status, or restaurant"
+              placeholder="Search by staff ID, name, role, status, or restaurant"
               className="w-full rounded-xl border border-border/70 bg-background px-3 py-2 text-sm outline-none ring-primary transition focus:ring-2 sm:max-w-sm"
             />
           </div>
@@ -384,6 +400,7 @@ export default function ManagerStaffPage() {
             <table className="w-full min-w-190 border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border/70 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  <th className="px-3 py-3 font-medium">Staff ID</th>
                   <th className="px-3 py-3 font-medium">Name</th>
                   <th className="px-3 py-3 font-medium">Role</th>
                   <th className="px-3 py-3 font-medium">Status</th>
@@ -396,19 +413,20 @@ export default function ManagerStaffPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                       Loading staff records...
                     </td>
                   </tr>
                 ) : filteredStaff.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                       No staff found. Add your first team member.
                     </td>
                   </tr>
                 ) : (
                   filteredStaff.map((member) => (
                     <tr key={member.id} className="border-b border-border/40 hover:bg-muted/40">
+                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{member.staff_id || "-"}</td>
                       <td className="px-3 py-3 font-medium text-foreground">{member.name || "-"}</td>
                       <td className="px-3 py-3 text-muted-foreground">{member.role || "-"}</td>
                       <td className="px-3 py-3">
@@ -485,6 +503,17 @@ export default function ManagerStaffPage() {
               <form onSubmit={submitForm} className="mt-1">
                 <div className="grid max-h-[72vh] gap-5 overflow-y-auto px-1 pb-1 md:grid-cols-2">
                 <label className="space-y-2.5">
+                  <span className="text-sm font-medium text-foreground">Staff ID</span>
+                  <input
+                    value={form.staffId}
+                    onChange={(event) => setForm((prev) => ({ ...prev, staffId: event.target.value }))}
+                    className="w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-sm outline-none ring-primary transition focus:border-primary/60 focus:ring-2"
+                    placeholder="e.g. STF-104"
+                    required
+                  />
+                </label>
+
+                <label className="space-y-2.5">
                   <span className="text-sm font-medium text-foreground">Name</span>
                   <input
                     value={form.name}
@@ -533,6 +562,18 @@ export default function ManagerStaffPage() {
                 </label>
 
                 <label className="space-y-2.5">
+                  <span className="text-sm font-medium text-foreground">Password</span>
+                  <input
+                    value={form.password}
+                    onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                    type="password"
+                    className="w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-sm outline-none ring-primary transition focus:border-primary/60 focus:ring-2"
+                    placeholder={editingId ? "Leave blank to keep current password" : "Create a password"}
+                    required={!editingId}
+                  />
+                </label>
+
+                <label className="space-y-2.5">
                   <span className="text-sm font-medium text-foreground">Status</span>
                   <Select
                     value={form.status}
@@ -556,7 +597,7 @@ export default function ManagerStaffPage() {
                   </Select>
                 </label>
 
-                <label className="space-y-2.5">
+                <label className="space-y-2.5 md:col-span-2">
                   <span className="text-sm font-medium text-foreground">Restaurant</span>
                   <Select
                     value={form.restaurantId || UNASSIGNED_RESTAURANT_VALUE}
