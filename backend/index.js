@@ -3,9 +3,13 @@ const fs = require("fs/promises");
 const path = require("path");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
+const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
 
 const execFileAsync = promisify(execFile);
+
+dotenv.config({ path: path.join(__dirname, ".env") });
+dotenv.config({ path: path.join(__dirname, ".env.local"), override: true });
 
 const app = express();
 const PORT = process.env.PORT || 8080;
