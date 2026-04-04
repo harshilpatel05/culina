@@ -124,17 +124,22 @@ export default function StaffLoginPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						<Tabs defaultValue="waiter" className="w-full">
+						<Tabs defaultValue="login" className="w-full">
+							<TabsList className="grid w-full grid-cols-2">
+								<TabsTrigger value="login">Login</TabsTrigger>
+								<TabsTrigger value="signup">Manager Sign Up</TabsTrigger>
+							</TabsList>
 
-
-							<TabsContent value="waiter" className="mt-4 space-y-4">
+							<TabsContent value="login" className="mt-4 space-y-4">
 								<LoginForm
 									title="POS Access"
 									subtitle="For floor operations and live orders"
 								/>
 							</TabsContent>
 
-
+							<TabsContent value="signup" className="mt-4 space-y-4">
+								<SignUpForm />
+							</TabsContent>
 						</Tabs>
 
 						<Separator />
@@ -289,6 +294,300 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 				disabled={isLoading || !staffId || !password}
 			>
 				{isLoading ? 'Signing in...' : 'Sign In'}
+			</Button>
+		</form>
+	)
+}
+
+type SignUpFormProps = {}
+
+function SignUpForm({}: SignUpFormProps) {
+	const router = useRouter()
+	const [formData, setFormData] = useState({
+		restaurantName: '',
+		restaurantLocation: '',
+		managerName: '',
+		managerEmail: '',
+		staffId: '',
+		password: '',
+		confirmPassword: '',
+	})
+	const [isLoading, setIsLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+	// Client-side validation
+	const validateForm = (): boolean => {
+		const errors: Record<string, string> = {}
+
+		if (!formData.restaurantName.trim()) {
+			errors.restaurantName = 'Restaurant name is required'
+		}
+		if (!formData.restaurantLocation.trim()) {
+			errors.restaurantLocation = 'Location is required'
+		}
+		if (!formData.managerName.trim()) {
+			errors.managerName = 'Name is required'
+		}
+		if (!formData.managerEmail.trim()) {
+			errors.managerEmail = 'Email is required'
+		} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.managerEmail)) {
+			errors.managerEmail = 'Invalid email format'
+		}
+		if (!formData.staffId.trim()) {
+			errors.staffId = 'Staff ID is required'
+		} else if (!/^[A-Z0-9]+-?[A-Z0-9]*$/.test(formData.staffId)) {
+			errors.staffId = 'Invalid format. Use format like "CUL-1024"'
+		}
+		if (!formData.password) {
+			errors.password = 'Password is required'
+		} else if (formData.password.length < 8) {
+			errors.password = 'Password must be at least 8 characters'
+		}
+		if (!formData.confirmPassword) {
+			errors.confirmPassword = 'Please confirm your password'
+		} else if (formData.password !== formData.confirmPassword) {
+			errors.confirmPassword = 'Passwords do not match'
+		}
+
+		setFieldErrors(errors)
+		return Object.keys(errors).length === 0
+	}
+
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const { name, value } = e.target
+		setFormData((prev) => ({
+			...prev,
+			[name]: value,
+		}))
+		// Clear field error when user starts typing
+		if (fieldErrors[name]) {
+			setFieldErrors((prev) => ({
+				...prev,
+				[name]: '',
+			}))
+		}
+	}
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault()
+		setError(null)
+
+		if (!validateForm()) {
+			return
+		}
+
+		setIsLoading(true)
+
+		try {
+			const response = await fetch('/api/staff-auth/signup', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				credentials: 'include',
+				body: JSON.stringify({
+					restaurant_name: formData.restaurantName,
+					restaurant_location: formData.restaurantLocation,
+					manager_name: formData.managerName,
+					manager_email: formData.managerEmail,
+					staff_id: formData.staffId,
+					password: formData.password,
+				}),
+			})
+
+			const data = await response.json()
+
+			if (!response.ok) {
+				if (response.status === 409) {
+					setFieldErrors((prev) => ({
+						...prev,
+						staffId: data.error || 'Staff ID already exists',
+					}))
+				} else {
+					setError(data.error || 'Sign up failed. Please try again.')
+				}
+				setIsLoading(false)
+				return
+			}
+
+			// Sign up successful
+			console.log('Sign up successful:', data.message)
+
+			// Auto-login redirect
+			router.push('/manager-dash')
+		} catch (err) {
+			console.error('Sign up error:', err)
+			setError(err instanceof Error ? err.message : 'An error occurred during sign up')
+			setIsLoading(false)
+		}
+	}
+
+	return (
+		<form onSubmit={handleSubmit} className="space-y-4">
+			<div className="rounded-lg border border-border/70 bg-background/70 p-3">
+				<p className="text-sm font-medium">Create Manager Account</p>
+				<p className="text-xs text-muted-foreground">
+					Set up your restaurant and manager profile
+				</p>
+			</div>
+
+			{/* Restaurant Details Section */}
+			<div className="space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+				<p className="text-xs font-semibold text-muted-foreground">RESTAURANT DETAILS</p>
+
+				<div className="space-y-2">
+					<Label htmlFor="restaurantName">Restaurant Name</Label>
+					<Input
+						id="restaurantName"
+						name="restaurantName"
+						type="text"
+						placeholder="e.g., The Golden Fork"
+						value={formData.restaurantName}
+						onChange={handleChange}
+						disabled={isLoading}
+						className={fieldErrors.restaurantName ? 'border-destructive' : ''}
+					/>
+					{fieldErrors.restaurantName && (
+						<p className="text-xs text-destructive">{fieldErrors.restaurantName}</p>
+					)}
+				</div>
+
+				<div className="space-y-2">
+					<Label htmlFor="restaurantLocation">Location</Label>
+					<Input
+						id="restaurantLocation"
+						name="restaurantLocation"
+						type="text"
+						placeholder="e.g., 123 Main St, Downtown"
+						value={formData.restaurantLocation}
+						onChange={handleChange}
+						disabled={isLoading}
+						className={fieldErrors.restaurantLocation ? 'border-destructive' : ''}
+					/>
+					{fieldErrors.restaurantLocation && (
+						<p className="text-xs text-destructive">{fieldErrors.restaurantLocation}</p>
+					)}
+				</div>
+			</div>
+
+			{/* Manager Details Section */}
+			<div className="space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+				<p className="text-xs font-semibold text-muted-foreground">MANAGER DETAILS</p>
+
+				<div className="space-y-2">
+					<Label htmlFor="managerName">Full Name</Label>
+					<Input
+						id="managerName"
+						name="managerName"
+						type="text"
+						placeholder="e.g., John Smith"
+						value={formData.managerName}
+						onChange={handleChange}
+						disabled={isLoading}
+						className={fieldErrors.managerName ? 'border-destructive' : ''}
+					/>
+					{fieldErrors.managerName && (
+						<p className="text-xs text-destructive">{fieldErrors.managerName}</p>
+					)}
+				</div>
+
+				<div className="space-y-2">
+					<Label htmlFor="managerEmail">Email</Label>
+					<Input
+						id="managerEmail"
+						name="managerEmail"
+						type="email"
+						placeholder="john@example.com"
+						value={formData.managerEmail}
+						onChange={handleChange}
+						disabled={isLoading}
+						className={fieldErrors.managerEmail ? 'border-destructive' : ''}
+					/>
+					{fieldErrors.managerEmail && (
+						<p className="text-xs text-destructive">{fieldErrors.managerEmail}</p>
+					)}
+				</div>
+
+				<div className="space-y-2">
+					<Label htmlFor="staffId">Staff ID</Label>
+					<Input
+						id="staffId"
+						name="staffId"
+						type="text"
+						placeholder="CUL-1024"
+						value={formData.staffId}
+						onChange={handleChange}
+						disabled={isLoading}
+						className={fieldErrors.staffId ? 'border-destructive' : ''}
+					/>
+					{fieldErrors.staffId && (
+						<p className="text-xs text-destructive">{fieldErrors.staffId}</p>
+					)}
+				</div>
+
+				<div className="space-y-2">
+					<Label htmlFor="password">Password</Label>
+					<div className="relative">
+						<Input
+							id="password"
+							name="password"
+							type="password"
+							placeholder="Minimum 8 characters"
+							value={formData.password}
+							onChange={handleChange}
+							disabled={isLoading}
+							className={fieldErrors.password ? 'border-destructive' : ''}
+						/>
+						<KeyRound className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+					</div>
+					{fieldErrors.password && (
+						<p className="text-xs text-destructive">{fieldErrors.password}</p>
+					)}
+				</div>
+
+				<div className="space-y-2">
+					<Label htmlFor="confirmPassword">Confirm Password</Label>
+					<div className="relative">
+						<Input
+							id="confirmPassword"
+							name="confirmPassword"
+							type="password"
+							placeholder="Re-enter your password"
+							value={formData.confirmPassword}
+							onChange={handleChange}
+							disabled={isLoading}
+							className={fieldErrors.confirmPassword ? 'border-destructive' : ''}
+						/>
+						<KeyRound className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+					</div>
+					{fieldErrors.confirmPassword && (
+						<p className="text-xs text-destructive">{fieldErrors.confirmPassword}</p>
+					)}
+				</div>
+			</div>
+
+			{error && (
+				<div className="rounded-md bg-destructive/10 p-3">
+					<p className="text-xs text-destructive">{error}</p>
+				</div>
+			)}
+
+			<Button
+				type="submit"
+				className="w-full"
+				disabled={
+					isLoading ||
+					!formData.restaurantName ||
+					!formData.restaurantLocation ||
+					!formData.managerName ||
+					!formData.managerEmail ||
+					!formData.staffId ||
+					!formData.password ||
+					!formData.confirmPassword
+				}
+			>
+				{isLoading ? 'Creating Account...' : 'Create Manager Account'}
 			</Button>
 		</form>
 	)
