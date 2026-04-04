@@ -10,10 +10,24 @@ interface JWTPayload {
   exp?: number
 }
 
-const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRATION = '7d'
 
-const secret = new TextEncoder().encode(JWT_SECRET)
+// Get and validate secret - trim whitespace to prevent encoding issues
+function getSecret(): Uint8Array {
+  const jwt_secret = process.env.JWT_SECRET?.trim()
+  
+  if (!jwt_secret) {
+    throw new Error('JWT_SECRET environment variable is not set or empty')
+  }
+  
+  if (jwt_secret.length < 32) {
+    console.warn(`JWT_SECRET is less than 32 characters (${jwt_secret.length} chars). This is not recommended for production.`)
+  }
+  
+  return new TextEncoder().encode(jwt_secret)
+}
+
+const secret = getSecret()
 
 export async function generateJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>): Promise<string> {
   return new SignJWT(payload)
