@@ -9,7 +9,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: 'Culina.ai',
-  description: 'Modern restaurant POS',
+  description: 'SaaS platform for restaurant operations, staff coordination, inventory control, and shift performance.',
   generator: 'v0.app',
   icons: {
     icon: [
