@@ -311,7 +311,13 @@ app.post("/jobs/month-close/run", async (req, res) => {
 });
 
 app.post("/jobs/inventory-insights/run", async (req, res) => {
-	if (!MONTH_CLOSE_JOB_SECRET || req.headers["x-job-secret"] !== MONTH_CLOSE_JOB_SECRET) {
+	const expectedSecret = String(MONTH_CLOSE_JOB_SECRET || "").trim();
+	const headerSecret = String(req.headers["x-job-secret"] || "").trim();
+	const bearerHeader = String(req.headers.authorization || "");
+	const bearerSecret = bearerHeader.startsWith("Bearer ") ? bearerHeader.slice(7).trim() : "";
+	const providedSecret = headerSecret || bearerSecret;
+
+	if (!expectedSecret || providedSecret !== expectedSecret) {
 		return res.status(401).json({ error: "Unauthorized" });
 	}
 

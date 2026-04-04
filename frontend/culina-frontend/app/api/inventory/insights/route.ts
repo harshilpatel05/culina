@@ -4,7 +4,7 @@ import { verifyJWT } from '@/utils/jwt'
 
 export async function POST() {
   const cookieStore = await cookies()
-  const token = cookieStore.get('auth-token')?.value
+  const token = cookieStore.get('auth-token')?.value || cookieStore.get('auth_token')?.value
 
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -22,7 +22,7 @@ export async function POST() {
   }
 
   const backendBaseUrl = (process.env.BACKEND_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '')
-  const secret = process.env.MONTH_CLOSE_JOB_SECRET
+  const secret = process.env.MONTH_CLOSE_JOB_SECRET?.trim()
 
   if (!secret) {
     return NextResponse.json({ error: 'Server misconfigured: MONTH_CLOSE_JOB_SECRET missing' }, { status: 500 })
