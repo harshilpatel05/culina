@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Boxes, Building2, LayoutDashboard, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
+import { BookOpen, Boxes, Building2, LayoutDashboard, Pencil, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -36,6 +36,28 @@ type StaffFormState = {
   salary: string;
   password: string;
   status: StaffStatus;
+};
+
+type ShiftRecord = {
+  id: string;
+  staff_id: string;
+  start_time: string | null;
+  end_time: string | null;
+  orders_completed?: number;
+  staff?: {
+    id?: string | null;
+    name?: string | null;
+    role?: string | null;
+    restaurant_id?: string | null;
+  } | null;
+};
+
+type OrderRecord = {
+  id: string;
+  status: string | null;
+  taken_by: string | null;
+  order_time?: string | null;
+  created_at?: string | null;
 };
 
 const EMPTY_FORM: StaffFormState = {
@@ -97,6 +119,41 @@ function formatDate(value: string | null) {
   });
 }
 
+function formatTime(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatShiftDuration(startTime: string | null, endTime: string | null) {
+  if (!startTime) {
+    return "-";
+  }
+
+  const startMs = new Date(startTime).getTime();
+  const endMs = endTime ? new Date(endTime).getTime() : Date.now();
+
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) {
+    return "-";
+  }
+
+  const diffSeconds = Math.floor((endMs - startMs) / 1000);
+  const hours = Math.floor(diffSeconds / 3600);
+  const minutes = Math.floor((diffSeconds % 3600) / 60);
+
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
 export default function ManagerStaffPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -109,6 +166,13 @@ export default function ManagerStaffPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StaffFormState>(EMPTY_FORM);
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [selectedStaff, setSelectedStaff] = useState<StaffRecord | null>(null);
+  const [shiftRecords, setShiftRecords] = useState<ShiftRecord[]>([]);
+  const [isShiftLoading, setIsShiftLoading] = useState(false);
+  const [shiftLoadError, setShiftLoadError] = useState<string | null>(null);
+  const [isInsightsJobRunning, setIsInsightsJobRunning] = useState(false);
+  const [insightsJobError, setInsightsJobError] = useState<string | null>(null);
 
   const loadData = async (restaurantId: string) => {
     try {
@@ -217,6 +281,143 @@ export default function ManagerStaffPage() {
       status: member.status ?? "inactive",
     });
     setIsFormOpen(true);
+  };
+
+  const closeShiftModal = () => {
+    setIsShiftModalOpen(false);
+    setSelectedStaff(null);
+    setShiftRecords([]);
+    setShiftLoadError(null);
+    setInsightsJobError(null);
+    setIsInsightsJobRunning(false);
+  };
+
+  const openShiftHistory = async (member: StaffRecord) => {
+    setSelectedStaff(member);
+    setIsShiftModalOpen(true);
+    setIsShiftLoading(true);
+    setShiftLoadError(null);
+    setInsightsJobError(null);
+
+    try {
+      const [shiftsResponse, ordersResponse] = await Promise.all([
+        fetch("/api/shifts"),
+        fetch("/api/orders?status=completed"),
+      ]);
+
+      if (!shiftsResponse.ok) {
+        const responseBody = await shiftsResponse.json().catch(() => null);
+        throw new Error(responseBody?.error ?? `Could not load shift history (${shiftsResponse.status})`);
+      }
+
+      if (!ordersResponse.ok) {
+        const responseBody = await ordersResponse.json().catch(() => null);
+        throw new Error(responseBody?.error ?? `Could not load completed orders (${ordersResponse.status})`);
+      }
+
+      const shiftData: ShiftRecord[] = await shiftsResponse.json();
+      const orderData: OrderRecord[] = await ordersResponse.json();
+      const normalizedData = Array.isArray(shiftData) ? shiftData : [];
+      const normalizedOrders = Array.isArray(orderData) ? orderData : [];
+      const memberInternalId = member.id;
+
+      const completedOrdersForStaff = normalizedOrders.filter((order) => {
+        return order.taken_by === memberInternalId && order.status === "completed";
+      });
+
+      const isOrderWithinShift = (
+        orderTimeValue: string | null | undefined,
+        shiftStartValue: string | null,
+        shiftEndValue: string | null
+      ) => {
+        if (!orderTimeValue || !shiftStartValue) {
+          return false;
+        }
+
+        const orderTimeMs = new Date(orderTimeValue).getTime();
+        const shiftStartMs = new Date(shiftStartValue).getTime();
+        const shiftEndMs = shiftEndValue ? new Date(shiftEndValue).getTime() : Date.now();
+
+        if (Number.isNaN(orderTimeMs) || Number.isNaN(shiftStartMs) || Number.isNaN(shiftEndMs)) {
+          return false;
+        }
+
+        return orderTimeMs >= shiftStartMs && orderTimeMs <= shiftEndMs;
+      };
+
+      const filtered = normalizedData
+        .filter((shift) => {
+          const linkedStaffId = shift.staff?.id ?? null;
+          return shift.staff_id === memberInternalId || linkedStaffId === memberInternalId;
+        })
+        .map((shift) => {
+          const ordersCompleted = completedOrdersForStaff.reduce((count, order) => {
+            const orderTimestamp = order.order_time ?? order.created_at;
+            if (isOrderWithinShift(orderTimestamp, shift.start_time, shift.end_time)) {
+              return count + 1;
+            }
+            return count;
+          }, 0);
+
+          return {
+            ...shift,
+            orders_completed: ordersCompleted,
+          };
+        })
+        .sort((a, b) => {
+          const aTime = a.start_time ? new Date(a.start_time).getTime() : 0;
+          const bTime = b.start_time ? new Date(b.start_time).getTime() : 0;
+          return bTime - aTime;
+        });
+
+      setShiftRecords(filtered);
+    } catch (shiftErr) {
+      const message = shiftErr instanceof Error ? shiftErr.message : "Failed to load shift history.";
+      setShiftLoadError(message);
+      setShiftRecords([]);
+    } finally {
+      setIsShiftLoading(false);
+    }
+  };
+
+  const runEmployeePerformanceInsightsJob = async () => {
+    if (isInsightsJobRunning) {
+      return;
+    }
+
+    try {
+      setIsInsightsJobRunning(true);
+      setInsightsJobError(null);
+
+      const response = await fetch("/api/employee-performance", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(errorPayload?.error || `Failed to run insights job (${response.status})`);
+      }
+
+      const csvText = await response.text();
+      const disposition = response.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = filenameMatch?.[1] || `employee-performance-${new Date().toISOString().slice(0, 10)}.csv`;
+
+      const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (jobErr) {
+      const message = jobErr instanceof Error ? jobErr.message : "Failed to run employee performance analysis.";
+      setInsightsJobError(message);
+    } finally {
+      setIsInsightsJobRunning(false);
+    }
   };
 
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
@@ -429,6 +630,7 @@ export default function ManagerStaffPage() {
               />
             </div>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">Click any staff row to view shift records.</p>
 
           {error ? (
             <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
@@ -464,7 +666,18 @@ export default function ManagerStaffPage() {
                   </tr>
                 ) : (
                   filteredStaff.map((member) => (
-                    <tr key={member.id} className="border-b border-border/40 hover:bg-muted/40">
+                    <tr
+                      key={member.id}
+                      className="cursor-pointer border-b border-border/40 hover:bg-muted/40 focus-within:bg-muted/40"
+                      onClick={() => void openShiftHistory(member)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          void openShiftHistory(member);
+                        }
+                      }}
+                      tabIndex={0}
+                    >
                       <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{member.staff_id || "-"}</td>
                       <td className="px-3 py-3 font-medium text-foreground">{member.name || "-"}</td>
                       <td className="px-3 py-3 text-muted-foreground">{member.role || "-"}</td>
@@ -483,7 +696,10 @@ export default function ManagerStaffPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => openEdit(member)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openEdit(member);
+                            }}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:text-foreground"
                             aria-label="Edit staff"
                           >
@@ -491,7 +707,10 @@ export default function ManagerStaffPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteMember(member.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void deleteMember(member.id);
+                            }}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-400/40 text-red-500 transition hover:bg-red-500/10"
                             aria-label="Delete staff"
                           >
@@ -646,6 +865,124 @@ export default function ManagerStaffPage() {
                   </button>
                 </div>
               </form>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isShiftModalOpen && selectedStaff ? (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+              onClick={closeShiftModal}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              <motion.section
+                className="w-full max-w-5xl rounded-2xl border border-slate-300/90 bg-card p-7 shadow-2xl sm:p-8 dark:border-slate-600/70"
+                onClick={(event) => event.stopPropagation()}
+                initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+              >
+                <div className="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Shift History</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {selectedStaff.name || "Unknown staff"} ({selectedStaff.staff_id || "-"})
+                    </p>
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground/80">
+                      Role: {selectedStaff.role || "-"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void runEmployeePerformanceInsightsJob()}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-600 bg-blue-600 text-white transition hover:bg-blue-700"
+                      aria-label="Run employee performance insights"
+                      title="Run employee performance insights"
+                      disabled={isInsightsJobRunning}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeShiftModal}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:text-foreground"
+                      aria-label="Close shift history"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {insightsJobError ? (
+                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                    {insightsJobError}
+                  </div>
+                ) : null}
+
+                <div className="max-h-[75vh] overflow-y-auto pr-1">
+                  {isShiftLoading ? (
+                    <div className="rounded-xl border border-border/70 bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
+                      Loading shift records...
+                    </div>
+                  ) : shiftLoadError ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                      {shiftLoadError}
+                    </div>
+                  ) : shiftRecords.length === 0 ? (
+                    <div className="rounded-xl border border-border/70 bg-background/50 px-4 py-8 text-center text-sm text-muted-foreground">
+                      No shift records found for this staff member.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-border/70 bg-background/50">
+                      <table className="w-full min-w-170 border-collapse text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-border/70 bg-muted/40 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            <th className="px-3 py-3 font-medium">Date</th>
+                            <th className="px-3 py-3 font-medium">Start</th>
+                            <th className="px-3 py-3 font-medium">End</th>
+                            <th className="px-3 py-3 font-medium">Duration</th>
+                            <th className="px-3 py-3 font-medium">Orders Completed</th>
+                            <th className="px-3 py-3 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shiftRecords.map((shift) => {
+                            const isActive = !shift.end_time;
+                            return (
+                              <tr key={shift.id} className="border-b border-border/50 last:border-b-0">
+                                <td className="px-3 py-3 text-foreground">{formatDate(shift.start_time)}</td>
+                                <td className="px-3 py-3 text-foreground">{formatTime(shift.start_time)}</td>
+                                <td className="px-3 py-3 text-foreground">
+                                  {isActive ? "Active" : formatTime(shift.end_time)}
+                                </td>
+                                <td className="px-3 py-3 text-foreground">{formatShiftDuration(shift.start_time, shift.end_time)}</td>
+                                <td className="px-3 py-3 text-foreground">{shift.orders_completed ?? 0}</td>
+                                <td className="px-3 py-3">
+                                  <span
+                                    className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
+                                      isActive
+                                        ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                        : "border-emerald-400/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                    }`}
+                                  >
+                                    {isActive ? "Active" : "Completed"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </motion.section>
             </motion.div>
           ) : null}

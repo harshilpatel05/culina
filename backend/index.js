@@ -32,6 +32,7 @@ const supabase =
 
 let isMonthCloseRunning = false;
 let isInsightsJobRunning = false;
+let isEmployeePerformanceJobRunning = false;
 
 function getPreviousMonthKey(now = new Date()) {
 	const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -308,6 +309,162 @@ async function runInventoryInsightsJob() {
 	}
 }
 
+function toIsoDate(value) {
+	const d = value ? new Date(value) : null;
+	if (!d || Number.isNaN(d.getTime())) {
+		return "";
+	}
+	return d.toISOString().slice(0, 10);
+}
+
+function toIsoTime(value) {
+	const d = value ? new Date(value) : null;
+	if (!d || Number.isNaN(d.getTime())) {
+		return "";
+	}
+	return d.toISOString().slice(11, 19);
+}
+
+function computeDurationHours(startTime, endTime) {
+	const startMs = startTime ? new Date(startTime).getTime() : NaN;
+	const endMs = endTime ? new Date(endTime).getTime() : NaN;
+
+	if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) {
+		return 0;
+	}
+
+	const hours = (endMs - startMs) / (1000 * 60 * 60);
+	return Number(hours.toFixed(4));
+}
+
+function isOrderInsideShift(orderTimestamp, shiftStart, shiftEnd) {
+	if (!orderTimestamp || !shiftStart || !shiftEnd) {
+		return false;
+	}
+
+	const orderMs = new Date(orderTimestamp).getTime();
+	const startMs = new Date(shiftStart).getTime();
+	const endMs = new Date(shiftEnd).getTime();
+
+	if (Number.isNaN(orderMs) || Number.isNaN(startMs) || Number.isNaN(endMs)) {
+		return false;
+	}
+
+	return orderMs >= startMs && orderMs <= endMs;
+}
+
+async function runEmployeePerformanceJob() {
+	if (!supabase) {
+		throw new Error(
+			"Supabase is not configured. Set SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY."
+		);
+	}
+
+	if (isEmployeePerformanceJobRunning) {
+		throw new Error("Employee performance job is already running");
+	}
+
+	isEmployeePerformanceJobRunning = true;
+
+	try {
+		const { data: shiftsData, error: shiftsError } = await supabase
+			.from("shifts")
+			.select("id, staff_id, start_time, end_time, staff!inner(staff_id)")
+			.order("start_time", { ascending: true });
+
+		if (shiftsError) {
+			throw new Error(`Failed to read shifts: ${shiftsError.message}`);
+		}
+
+		const { data: completedOrdersData, error: completedOrdersError } = await supabase
+			.from("orders")
+			.select("taken_by, status, order_time, created_at")
+			.eq("status", "completed");
+
+		if (completedOrdersError) {
+			throw new Error(`Failed to read completed orders: ${completedOrdersError.message}`);
+		}
+
+		const shiftRows = Array.isArray(shiftsData) ? shiftsData : [];
+		const completedOrders = Array.isArray(completedOrdersData) ? completedOrdersData : [];
+
+		const employeeLogsRows = shiftRows
+			.filter((shift) => shift.start_time && shift.end_time)
+			.map((shift) => {
+				const employeeId = shift.staff?.staff_id || shift.staff_id;
+				const ordersCompleted = completedOrders.reduce((count, order) => {
+					if (order.taken_by !== shift.staff_id) {
+						return count;
+					}
+
+					const orderTimestamp = order.order_time || order.created_at;
+					if (isOrderInsideShift(orderTimestamp, shift.start_time, shift.end_time)) {
+						return count + 1;
+					}
+
+					return count;
+				}, 0);
+
+				return {
+					employee_id: employeeId,
+					date: toIsoDate(shift.start_time),
+					start_time: toIsoTime(shift.start_time),
+					end_time: toIsoTime(shift.end_time),
+					duration: computeDurationHours(shift.start_time, shift.end_time),
+					orders_completed: ordersCompleted,
+				};
+			})
+			.filter((row) => row.employee_id && row.date && row.start_time && row.end_time);
+
+		const employeeLogsCsvPath = path.join(__dirname, "employee_logs.csv");
+		const performanceResultsCsvPath = path.join(__dirname, "employee_performance_results.csv");
+
+		await writeCsv(
+			employeeLogsCsvPath,
+			["employee_id", "date", "start_time", "end_time", "duration", "orders_completed"],
+			employeeLogsRows
+		);
+
+		const pythonCandidates = Array.from(new Set([PYTHON_BIN, "python3", "python", "py"].filter(Boolean)));
+
+		let pythonRunError = null;
+		for (const candidate of pythonCandidates) {
+			try {
+				await execFileAsync(candidate, [path.join(__dirname, "employee_performance.py")], {
+					cwd: __dirname,
+					maxBuffer: 1024 * 1024 * 10,
+					timeout: 5 * 60 * 1000,
+				});
+
+				pythonRunError = null;
+				break;
+			} catch (error) {
+				pythonRunError = error;
+				if (error && error.code !== "ENOENT") {
+					break;
+				}
+			}
+		}
+
+		if (pythonRunError) {
+			if (pythonRunError.code === "ENOENT") {
+				throw new Error(
+					`Python runtime not found. Tried: ${pythonCandidates.join(", ")}. Set PYTHON_BIN or install Python in deployment image.`
+				);
+			}
+
+			const stderrText = typeof pythonRunError.stderr === "string" ? pythonRunError.stderr.trim() : "";
+			const message = stderrText || pythonRunError.message || "Python execution failed";
+			throw new Error(message);
+		}
+
+		const performanceCsv = await fs.readFile(performanceResultsCsvPath, "utf8");
+		return performanceCsv;
+	} finally {
+		isEmployeePerformanceJobRunning = false;
+	}
+}
+
 app.get("/", (_req, res) => {
 	res.json({ status: "ok", message: "Culina backend is running" });
 });
@@ -360,6 +517,32 @@ app.post("/jobs/inventory-insights/run", async (req, res) => {
 		return res.status(200).send(csv);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Inventory insights generation failed";
+		return res.status(500).json({ error: message });
+	}
+});
+
+app.post("/jobs/employee-performance/run", async (req, res) => {
+	const expectedSecret = String(
+		process.env.EMPLOYEE_PERFORMANCE_JOB_SECRET || process.env.INVENTORY_INSIGHTS_JOB_SECRET || MONTH_CLOSE_JOB_SECRET || ""
+	).trim();
+	const headerSecret = String(req.headers["x-job-secret"] || "").trim();
+	const bearerHeader = String(req.headers.authorization || "");
+	const bearerSecret = bearerHeader.startsWith("Bearer ") ? bearerHeader.slice(7).trim() : "";
+	const providedSecret = headerSecret || bearerSecret;
+
+	if (!expectedSecret || providedSecret !== expectedSecret) {
+		return res.status(401).json({ error: "Unauthorized" });
+	}
+
+	try {
+		const csv = await runEmployeePerformanceJob();
+		const dateStamp = new Date().toISOString().slice(0, 10);
+		res.setHeader("Content-Type", "text/csv; charset=utf-8");
+		res.setHeader("Content-Disposition", `attachment; filename="employee-performance-${dateStamp}.csv"`);
+		res.setHeader("Cache-Control", "no-store");
+		return res.status(200).send(csv);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Employee performance generation failed";
 		return res.status(500).json({ error: message });
 	}
 });
