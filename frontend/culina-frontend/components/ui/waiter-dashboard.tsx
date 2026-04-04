@@ -146,24 +146,44 @@ function mapOrderStatusToTableStatus(orderStatus: OrderStatus | string): TableSt
 }
 
 function MetricCard({ label, value, variant, icon }: MetricCardProps) {
-  const variantClassMap: Record<MetricVariant, string> = {
-    neutral: "border-slate-200/80 bg-slate-50/80 text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200",
-    success: "border-emerald-200/70 bg-emerald-50/65 text-emerald-700 shadow-[0_1px_2px_rgba(5,150,105,0.08)] dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-    danger: "border-rose-200/70 bg-rose-50/65 text-rose-700 shadow-[0_1px_2px_rgba(225,29,72,0.08)] dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
-    info: "border-sky-200/70 bg-sky-50/65 text-sky-700 shadow-[0_1px_2px_rgba(14,165,233,0.08)] dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
+  const variantClassMap = {
+    neutral: {
+      border: "border-slate-300/80 dark:border-slate-600/70",
+      surface: "bg-linear-to-br from-slate-200 via-slate-200 to-slate-300 dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-700/90",
+      value: "text-slate-700 dark:text-slate-100",
+      icon: "text-slate-600 dark:text-slate-300",
+    },
+    success: {
+      border: "border-emerald-300/70 dark:border-emerald-500/40",
+      surface: "bg-linear-to-br from-emerald-100 via-emerald-200 to-teal-300 dark:from-emerald-950 dark:via-emerald-900/90 dark:to-teal-900/90",
+      value: "text-emerald-700 dark:text-emerald-300",
+      icon: "text-emerald-600 dark:text-emerald-300",
+    },
+    danger: {
+      border: "border-rose-300/70 dark:border-rose-500/40",
+      surface: "bg-linear-to-br from-rose-100 via-pink-200 to-rose-300 dark:from-rose-950 dark:via-rose-900/90 dark:to-pink-900/90",
+      value: "text-rose-700 dark:text-rose-300",
+      icon: "text-rose-600 dark:text-rose-300",
+    },
+    info: {
+      border: "border-sky-300/70 dark:border-sky-500/40",
+      surface: "bg-linear-to-br from-sky-100 via-sky-200 to-cyan-300 dark:from-sky-950 dark:via-sky-900/90 dark:to-cyan-900/90",
+      value: "text-sky-700 dark:text-sky-300",
+      icon: "text-sky-600 dark:text-sky-300",
+    },
   };
 
   return (
     <motion.div
-      className={`rounded-xl border px-4 py-3.5 backdrop-blur-sm ${variantClassMap[variant]}`}
+      className={`rounded-2xl border px-4 py-4 shadow-[0_8px_22px_rgba(30,64,175,0.18)] backdrop-blur ${variantClassMap[variant].surface} ${variantClassMap[variant].border}`}
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
     >
-      <p className="flex items-center gap-1.5 text-sm font-medium">
-        {icon}
+      <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+        {icon ? <span className={variantClassMap[variant].icon}>{icon}</span> : null}
         {label}
       </p>
-      <p className="mt-1.5 text-[2rem] font-semibold leading-none">{value}</p>
+      <p className={`mt-2 text-[2.1rem] font-semibold leading-none ${variantClassMap[variant].value}`}>{value}</p>
     </motion.div>
   );
 }
