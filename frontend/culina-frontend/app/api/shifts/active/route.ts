@@ -3,6 +3,20 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { verifyJWT } from '@/utils/jwt'
 
+function ensureTimezone(timestamp: string | null) {
+  if (!timestamp) {
+    return timestamp
+  }
+
+  // Some DB timestamp columns may return values without timezone offsets.
+  // Treat them as UTC to avoid local offset drift (e.g. +05:30 in IST).
+  if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(timestamp)) {
+    return timestamp
+  }
+
+  return `${timestamp}Z`
+}
+
 export async function GET() {
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
@@ -45,5 +59,13 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ activeShift: data ?? null })
+  const normalizedShift = data
+    ? {
+        ...data,
+        start_time: ensureTimezone(data.start_time),
+        end_time: ensureTimezone(data.end_time),
+      }
+    : null
+
+  return NextResponse.json({ activeShift: normalizedShift })
 }
