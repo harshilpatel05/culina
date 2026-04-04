@@ -46,6 +46,13 @@ type RestaurantTable = {
   table_number: number;
 };
 
+type ShiftRecord = {
+  id: string;
+  staff_id: string;
+  start_time: string;
+  end_time: string | null;
+};
+
 type MenuItem = {
   id: string;
   name: string;
@@ -64,9 +71,11 @@ type MetricCardProps = {
 type ShiftControlCardProps = {
   shiftHours: number[];
   isShiftActive: boolean;
+  isShiftProcessing: boolean;
   isLoggingOut: boolean;
   isOrderFormOpen: boolean;
   resolvedTheme: string;
+  shiftError: string | null;
   onLogout: () => void;
   onToggleTheme: () => void;
   onToggleOrderForm: () => void;
@@ -191,9 +200,11 @@ function MetricCard({ label, value, variant, icon }: MetricCardProps) {
 function ShiftControlCard({
   shiftHours,
   isShiftActive,
+  isShiftProcessing,
   isLoggingOut,
   isOrderFormOpen,
   resolvedTheme,
+  shiftError,
   onLogout,
   onToggleTheme,
   onToggleOrderForm,
@@ -271,7 +282,7 @@ function ShiftControlCard({
           <motion.button
             type="button"
             onClick={onToggleShift}
-            disabled={isLoggingOut}
+            disabled={isLoggingOut || isShiftProcessing}
             className={`w-full rounded-lg border-2 px-5 py-2 text-sm font-bold tracking-wide shadow-md ring-1 transition-all ${
               isShiftActive
                 ? "border-red-700 bg-red-600 text-white ring-red-500/35 hover:bg-red-700"
@@ -282,9 +293,13 @@ function ShiftControlCard({
           >
             <span className="flex items-center justify-center gap-2">
               <Clock className="size-4" />
-              {isShiftActive ? "End Shift" : "Start Shift"}
+              {isShiftProcessing ? (isShiftActive ? "Ending..." : "Starting...") : isShiftActive ? "End Shift" : "Start Shift"}
             </span>
           </motion.button>
+
+          {shiftError && (
+            <p className="pt-0.5 text-xs text-destructive">{shiftError}</p>
+          )}
 
           {!isShiftActive && !isLoggingOut && (
             <p className="pt-0.5 text-xs text-muted-foreground">
@@ -310,6 +325,10 @@ export function WaiterDashboard({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isShiftActive, setIsShiftActive] = useState(false);
+  const [activeShift, setActiveShift] = useState<ShiftRecord | null>(null);
+  const [isShiftProcessing, setIsShiftProcessing] = useState(false);
+  const [shiftError, setShiftError] = useState<string | null>(null);
+  const [elapsedShiftSeconds, setElapsedShiftSeconds] = useState(0);
   const [newOrder, setNewOrder] = useState({ tableNumber: "", guests: "2", notes: "", items: [] as DraftOrderItem[] });
   const [newItem, setNewItem] = useState({ itemName: "", quantity: 1 });
   const [isQtySliderOpen, setIsQtySliderOpen] = useState(false);
@@ -324,6 +343,80 @@ export function WaiterDashboard({
   const [statusUpdateError, setStatusUpdateError] = useState<string | null>(null);
   const [allTables, setAllTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+
+  const displayedShiftHours = useMemo(() => {
+    if (!isShiftActive) {
+      return [0, 0, 0];
+    }
+
+    const hours = Math.floor(elapsedShiftSeconds / 3600);
+    const minutes = Math.floor((elapsedShiftSeconds % 3600) / 60);
+    const seconds = elapsedShiftSeconds % 60;
+
+    return [hours, minutes, seconds];
+  }, [elapsedShiftSeconds, isShiftActive]);
+
+  const refreshActiveShift = useCallback(async () => {
+    try {
+      setShiftError(null);
+      const response = await fetch('/api/shifts/active');
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || `Failed to load shift (${response.status})`);
+      }
+
+      const payload = await response.json();
+      const nextActiveShift = (payload?.activeShift ?? null) as ShiftRecord | null;
+      setActiveShift(nextActiveShift);
+      setIsShiftActive(Boolean(nextActiveShift));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load shift';
+      setShiftError(errorMessage);
+      setActiveShift(null);
+      setIsShiftActive(false);
+    }
+  }, []);
+
+  const handleToggleShift = useCallback(async () => {
+    if (isShiftProcessing) {
+      return;
+    }
+
+    try {
+      setIsShiftProcessing(true);
+      setShiftError(null);
+
+      if (activeShift?.id && isShiftActive) {
+        const endResponse = await fetch(`/api/shifts/${activeShift.id}/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!endResponse.ok) {
+          const payload = await endResponse.json().catch(() => null);
+          throw new Error(payload?.error || `Failed to end shift (${endResponse.status})`);
+        }
+      } else {
+        const startResponse = await fetch('/api/shifts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!startResponse.ok) {
+          const payload = await startResponse.json().catch(() => null);
+          throw new Error(payload?.error || `Failed to start shift (${startResponse.status})`);
+        }
+      }
+
+      await refreshActiveShift();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update shift state';
+      setShiftError(errorMessage);
+    } finally {
+      setIsShiftProcessing(false);
+    }
+  }, [activeShift?.id, isShiftActive, isShiftProcessing, refreshActiveShift]);
 
   const refreshTablesAndOrders = useCallback(async () => {
     try {
@@ -407,6 +500,31 @@ export function WaiterDashboard({
   useEffect(() => {
     void refreshTablesAndOrders();
   }, [refreshTablesAndOrders]);
+
+  useEffect(() => {
+    void refreshActiveShift();
+  }, [refreshActiveShift]);
+
+  useEffect(() => {
+    if (!activeShift?.start_time || !isShiftActive) {
+      setElapsedShiftSeconds(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      const startMs = new Date(activeShift.start_time).getTime();
+      const nowMs = Date.now();
+      const diffSeconds = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+      setElapsedShiftSeconds(diffSeconds);
+    };
+
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [activeShift?.start_time, isShiftActive]);
 
   useEffect(() => {
     const fetchMenuItems = async () => {
@@ -699,15 +817,17 @@ export function WaiterDashboard({
               {/* Mobile Shift Control */}
               <div className="w-full xl:hidden">
                 <ShiftControlCard
-                  shiftHours={shiftHours}
+                  shiftHours={displayedShiftHours}
                   isShiftActive={isShiftActive}
+                  isShiftProcessing={isShiftProcessing}
                   isLoggingOut={isLoggingOut}
                   isOrderFormOpen={isOrderFormOpen}
                   resolvedTheme={resolvedTheme}
+                  shiftError={shiftError}
                   onLogout={handleLogout}
                   onToggleTheme={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
                   onToggleOrderForm={() => setIsOrderFormOpen((prev) => !prev)}
-                  onToggleShift={() => setIsShiftActive((prev) => !prev)}
+                  onToggleShift={handleToggleShift}
                 />
               </div>
             </section>
@@ -1167,15 +1287,17 @@ export function WaiterDashboard({
         <aside className="hidden xl:block xl:self-start">
           <div className="xl:sticky xl:top-6 xl:h-[calc(100vh-136px)] xl:min-h-128">
             <ShiftControlCard
-              shiftHours={shiftHours}
+              shiftHours={displayedShiftHours}
               isShiftActive={isShiftActive}
+              isShiftProcessing={isShiftProcessing}
               isLoggingOut={isLoggingOut}
               isOrderFormOpen={isOrderFormOpen}
               resolvedTheme={resolvedTheme}
+              shiftError={shiftError}
               onLogout={handleLogout}
               onToggleTheme={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               onToggleOrderForm={() => setIsOrderFormOpen((prev) => !prev)}
-              onToggleShift={() => setIsShiftActive((prev) => !prev)}
+              onToggleShift={handleToggleShift}
               fillHeight
             />
           </div>

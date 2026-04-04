@@ -97,6 +97,13 @@ type TrendPoint = {
   tables: number;
 };
 
+type ShiftRecord = {
+  id: string;
+  staff_id: string;
+  start_time: string;
+  end_time: string | null;
+};
+
 type ManagerDashboardProps = {
   managerName?: string;
 };
@@ -295,11 +302,13 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
-  const [isShiftOpen, setIsShiftOpen] = useState(true);
   const [isLoadingTables, setIsLoadingTables] = useState(true);
   const [tablesError, setTablesError] = useState<string | null>(null);
   const [isLoadingStaff, setIsLoadingStaff] = useState(true);
   const [staffError, setStaffError] = useState<string | null>(null);
+  const [isLoadingShiftSnapshot, setIsLoadingShiftSnapshot] = useState(true);
+  const [shiftSnapshotError, setShiftSnapshotError] = useState<string | null>(null);
+  const [activeShiftCount, setActiveShiftCount] = useState(0);
   const [isOpeningBilling, setIsOpeningBilling] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
@@ -448,6 +457,47 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
     };
     
     fetchStaff();
+  }, []);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    const fetchShiftSnapshot = async () => {
+      try {
+        setIsLoadingShiftSnapshot(true);
+        setShiftSnapshotError(null);
+
+        const response = await fetch('/api/shifts');
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.error || `Failed to fetch shifts (${response.status})`);
+        }
+
+        const payload = await response.json();
+        const shiftList = (Array.isArray(payload) ? payload : payload?.data || []) as ShiftRecord[];
+        const activeCount = shiftList.filter((shift) => shift.end_time == null).length;
+
+        if (!isDisposed) {
+          setActiveShiftCount(activeCount);
+        }
+      } catch (error) {
+        if (!isDisposed) {
+          const message = error instanceof Error ? error.message : 'Failed to load shift status';
+          setShiftSnapshotError(message);
+        }
+      } finally {
+        if (!isDisposed) {
+          setIsLoadingShiftSnapshot(false);
+        }
+      }
+    };
+
+    void fetchShiftSnapshot();
+
+    return () => {
+      isDisposed = true;
+    };
   }, []);
 
   const metrics = useMemo(() => {
@@ -636,17 +686,12 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
 
               <motion.button
                 type="button"
-                onClick={() => setIsShiftOpen((current) => !current)}
-                disabled={isLoggingOut}
-                className={`rounded-lg border px-4 py-3 text-sm font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.12)] transition-all ${
-                  isShiftOpen
-                    ? "border-red-500/30 bg-red-500 text-white hover:bg-red-600"
-                    : "border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
-                } disabled:cursor-not-allowed disabled:opacity-50`}
+                disabled
+                className="rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-4 py-3 text-sm font-semibold text-emerald-700 shadow-[0_1px_2px_rgba(15,23,42,0.12)] dark:text-emerald-300 disabled:cursor-default disabled:opacity-100"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                {isShiftOpen ? "Close Shift" : "Open Shift"}
+                {isLoadingShiftSnapshot ? "Loading shifts..." : `${activeShiftCount} Active Shifts`}
               </motion.button>
 
               <motion.button
@@ -680,6 +725,16 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
             className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
           >
             <p className="text-sm font-medium text-destructive">{logoutError}</p>
+          </motion.div>
+        )}
+
+        {shiftSnapshotError && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-lg border border-amber-300/30 bg-amber-100/30 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10"
+          >
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Shift telemetry warning: {shiftSnapshotError}</p>
           </motion.div>
         )}
 
