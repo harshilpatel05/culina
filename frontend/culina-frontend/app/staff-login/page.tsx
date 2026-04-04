@@ -125,47 +125,16 @@ export default function StaffLoginPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<Tabs defaultValue="waiter" className="w-full">
-							<TabsList className="grid w-full grid-cols-2">
-								<TabsTrigger value="waiter">Waiter</TabsTrigger>
-								<TabsTrigger value="manager">Manager</TabsTrigger>
-							</TabsList>
+
 
 							<TabsContent value="waiter" className="mt-4 space-y-4">
 								<LoginForm
-									title="Waiter Access"
+									title="POS Access"
 									subtitle="For floor operations and live orders"
 								/>
 							</TabsContent>
 
-							<TabsContent value="manager" className="mt-4 space-y-4">
-								<div className="space-y-4">
-									<div className="rounded-lg border border-border/70 bg-background/70 p-3">
-										<p className="text-sm font-medium">Manager Access</p>
-										<p className="text-xs text-muted-foreground">
-											Sign in with your Google workspace account.
-										</p>
-									</div>
 
-									<Button
-										type="button"
-										variant="outline"
-										className="w-full"
-										onClick={handleManagerGoogleSignIn}
-										disabled={isManagerLoading}
-									>
-										<span className="inline-flex size-4 items-center justify-center rounded-full border border-border text-[10px] font-semibold">
-											G
-										</span>
-										{isManagerLoading ? 'Redirecting to Google...' : 'Continue with Google'}
-									</Button>
-
-									{managerError ? (
-										<p className="text-xs text-destructive" role="alert">
-											{managerError}
-										</p>
-									) : null}
-								</div>
-							</TabsContent>
 						</Tabs>
 
 						<Separator />
@@ -264,9 +233,9 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 
 			<div className="space-y-2">
 				<Label htmlFor={`${title}-staff-id`}>Staff ID</Label>
-				<Input 
-					id={`${title}-staff-id`} 
-					type="text" 
+				<Input
+					id={`${title}-staff-id`}
+					type="text"
 					placeholder="CUL-1024"
 					value={staffId}
 					onChange={(e) => setStaffId(e.target.value)}
@@ -278,9 +247,9 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 			<div className="space-y-2">
 				<Label htmlFor={`${title}-pin`}>Password</Label>
 				<div className="relative">
-					<Input 
-						id={`${title}-pin`} 
-						type="password" 
+					<Input
+						id={`${title}-pin`}
+						type="password"
 						placeholder="Enter password"
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
@@ -299,7 +268,7 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 
 			<div className="flex items-center justify-between gap-2">
 				<div className="flex items-center gap-2">
-					<Checkbox 
+					<Checkbox
 						id={`${title}-remember`}
 						checked={rememberMe}
 						onCheckedChange={(checked) => setRememberMe(checked as boolean)}
@@ -314,8 +283,8 @@ function LoginForm({ title, subtitle }: LoginFormProps) {
 				</Link>
 			</div>
 
-			<Button 
-				type="submit" 
+			<Button
+				type="submit"
 				className="w-full"
 				disabled={isLoading || !staffId || !password}
 			>
