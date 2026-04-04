@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Boxes, Building2, LayoutDashboard, Pencil, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react";
+import { BookOpen, Boxes, Building2, LayoutDashboard, Loader2, Pencil, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -173,6 +173,10 @@ export default function ManagerStaffPage() {
   const [shiftLoadError, setShiftLoadError] = useState<string | null>(null);
   const [isInsightsJobRunning, setIsInsightsJobRunning] = useState(false);
   const [insightsJobError, setInsightsJobError] = useState<string | null>(null);
+  const [insightText, setInsightText] = useState<string | null>(null);
+  const [insightGeneratedAt, setInsightGeneratedAt] = useState<string | null>(null);
+  const [insightUsedFallback, setInsightUsedFallback] = useState(false);
+  const [insightFallbackReason, setInsightFallbackReason] = useState<string | null>(null);
 
   const loadData = async (restaurantId: string) => {
     try {
@@ -290,6 +294,10 @@ export default function ManagerStaffPage() {
     setShiftLoadError(null);
     setInsightsJobError(null);
     setIsInsightsJobRunning(false);
+    setInsightText(null);
+    setInsightGeneratedAt(null);
+    setInsightUsedFallback(false);
+    setInsightFallbackReason(null);
   };
 
   const openShiftHistory = async (member: StaffRecord) => {
@@ -298,6 +306,10 @@ export default function ManagerStaffPage() {
     setIsShiftLoading(true);
     setShiftLoadError(null);
     setInsightsJobError(null);
+    setInsightText(null);
+    setInsightGeneratedAt(null);
+    setInsightUsedFallback(false);
+    setInsightFallbackReason(null);
 
     try {
       const [shiftsResponse, ordersResponse] = await Promise.all([
@@ -385,12 +397,28 @@ export default function ManagerStaffPage() {
       return;
     }
 
+    if (!selectedStaff?.staff_id) {
+      setInsightsJobError("Cannot run insights for this record because staff ID is missing.");
+      return;
+    }
+
     try {
       setIsInsightsJobRunning(true);
       setInsightsJobError(null);
+      setInsightText(null);
+      setInsightGeneratedAt(null);
+      setInsightUsedFallback(false);
+      setInsightFallbackReason(null);
 
       const response = await fetch("/api/employee-performance", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId: selectedStaff.staff_id,
+          employeeName: selectedStaff.name,
+        }),
       });
 
       if (!response.ok) {
@@ -398,20 +426,16 @@ export default function ManagerStaffPage() {
         throw new Error(errorPayload?.error || `Failed to run insights job (${response.status})`);
       }
 
-      const csvText = await response.text();
-      const disposition = response.headers.get("content-disposition") || "";
-      const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-      const filename = filenameMatch?.[1] || `employee-performance-${new Date().toISOString().slice(0, 10)}.csv`;
+      const payload = await response.json();
 
-      const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(downloadUrl);
+      if (!payload?.insightText || typeof payload.insightText !== "string") {
+        throw new Error("Insights response was invalid. Please try again.");
+      }
+
+      setInsightText(payload.insightText);
+      setInsightGeneratedAt(typeof payload.generatedAt === "string" ? payload.generatedAt : null);
+      setInsightUsedFallback(Boolean(payload.usedFallback));
+      setInsightFallbackReason(typeof payload.fallbackReason === "string" ? payload.fallbackReason : null);
     } catch (jobErr) {
       const message = jobErr instanceof Error ? jobErr.message : "Failed to run employee performance analysis.";
       setInsightsJobError(message);
@@ -902,12 +926,13 @@ export default function ManagerStaffPage() {
                     <button
                       type="button"
                       onClick={() => void runEmployeePerformanceInsightsJob()}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-600 bg-blue-600 text-white transition hover:bg-blue-700"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-600 bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-500"
                       aria-label="Run employee performance insights"
                       title="Run employee performance insights"
+                      aria-busy={isInsightsJobRunning}
                       disabled={isInsightsJobRunning}
                     >
-                      <Sparkles className="h-4 w-4" />
+                      {isInsightsJobRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                     </button>
                     <button
                       type="button"
@@ -923,6 +948,24 @@ export default function ManagerStaffPage() {
                 {insightsJobError ? (
                   <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                     {insightsJobError}
+                  </div>
+                ) : null}
+
+                {insightText ? (
+                  <div className="mb-4 rounded-xl border border-blue-200/80 bg-blue-50/80 px-4 py-3 dark:border-blue-500/30 dark:bg-blue-500/10">
+                    <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs uppercase tracking-[0.12em] text-blue-800/80 dark:text-blue-300/90">
+                      <span>Employee Insights</span>
+                      {insightGeneratedAt ? (
+                        <span>
+                          Generated {new Date(insightGeneratedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                        </span>
+                      ) : null}
+                      {insightUsedFallback ? <span>Fallback summary</span> : null}
+                    </div>
+                    <p className="text-sm leading-6 text-slate-800 dark:text-slate-100">{insightText}</p>
+                    {insightUsedFallback && insightFallbackReason ? (
+                      <p className="mt-2 text-xs text-blue-800/80 dark:text-blue-200/80">Reason: {insightFallbackReason}</p>
+                    ) : null}
                   </div>
                 ) : null}
 
