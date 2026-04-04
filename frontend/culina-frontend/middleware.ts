@@ -32,7 +32,8 @@ export async function middleware(request: NextRequest) {
   const isStaffAuthRoute =
     pathname === "/api/staff-auth" ||
     pathname === "/api/staff-auth/verify" ||
-    pathname === "/api/staff-auth/logout";
+    pathname === "/api/staff-auth/logout" ||
+    pathname === "/api/staff-auth/signup";
 
   const isMutatingMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
 

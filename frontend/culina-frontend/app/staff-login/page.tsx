@@ -307,7 +307,6 @@ function SignUpForm({}: SignUpFormProps) {
 		restaurantName: '',
 		restaurantLocation: '',
 		managerName: '',
-		managerEmail: '',
 		staffId: '',
 		password: '',
 		confirmPassword: '',
@@ -328,11 +327,6 @@ function SignUpForm({}: SignUpFormProps) {
 		}
 		if (!formData.managerName.trim()) {
 			errors.managerName = 'Name is required'
-		}
-		if (!formData.managerEmail.trim()) {
-			errors.managerEmail = 'Email is required'
-		} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.managerEmail)) {
-			errors.managerEmail = 'Invalid email format'
 		}
 		if (!formData.staffId.trim()) {
 			errors.staffId = 'Staff ID is required'
@@ -390,7 +384,6 @@ function SignUpForm({}: SignUpFormProps) {
 					restaurant_name: formData.restaurantName,
 					restaurant_location: formData.restaurantLocation,
 					manager_name: formData.managerName,
-					manager_email: formData.managerEmail,
 					staff_id: formData.staffId,
 					password: formData.password,
 				}),
@@ -493,23 +486,6 @@ function SignUpForm({}: SignUpFormProps) {
 				</div>
 
 				<div className="space-y-2">
-					<Label htmlFor="managerEmail">Email</Label>
-					<Input
-						id="managerEmail"
-						name="managerEmail"
-						type="email"
-						placeholder="john@example.com"
-						value={formData.managerEmail}
-						onChange={handleChange}
-						disabled={isLoading}
-						className={fieldErrors.managerEmail ? 'border-destructive' : ''}
-					/>
-					{fieldErrors.managerEmail && (
-						<p className="text-xs text-destructive">{fieldErrors.managerEmail}</p>
-					)}
-				</div>
-
-				<div className="space-y-2">
 					<Label htmlFor="staffId">Staff ID</Label>
 					<Input
 						id="staffId"
@@ -581,7 +557,7 @@ function SignUpForm({}: SignUpFormProps) {
 					!formData.restaurantName ||
 					!formData.restaurantLocation ||
 					!formData.managerName ||
-					!formData.managerEmail ||
+
 					!formData.staffId ||
 					!formData.password ||
 					!formData.confirmPassword

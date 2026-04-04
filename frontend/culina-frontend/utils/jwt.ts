@@ -27,9 +27,8 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(jwt_secret)
 }
 
-const secret = getSecret()
-
 export async function generateJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>): Promise<string> {
+  const secret = getSecret()
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -39,6 +38,7 @@ export async function generateJWT(payload: Omit<JWTPayload, 'iat' | 'exp'>): Pro
 
 export async function verifyJWT(token: string): Promise<JWTPayload | null> {
   try {
+    const secret = getSecret()
     const { payload } = await jwtVerify(token, secret, {
       algorithms: ['HS256']
     })
