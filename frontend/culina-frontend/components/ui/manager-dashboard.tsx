@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -33,6 +33,10 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { MacOSSidebar } from "@/components/ui/macos-sidebar-base";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
+import { extractAffectedTableIds, subscribeToTableOperationsRealtime, type TableOpsRealtimePayload } from "@/utils/supabase/table-operations-realtime";
+import type { ChannelStatus } from "@/utils/supabase/table-operations-realtime";
+
+type RealtimeStatus = ChannelStatus | "CONNECTING";
 
 type TableStatus = "Unoccupied" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 type OrderStatus = 'placed' | 'preparing' | 'served' | 'completed' | 'cancelled';
@@ -82,6 +86,17 @@ type ApiOrder = {
   total_amount?: number | string;
   order_time?: string;
   order_items?: ApiOrderItem[];
+};
+
+type RestaurantTableRecord = {
+  id: string;
+  table_number: number | string;
+};
+
+type StaffApiRecord = {
+  id: string;
+  name: string;
+  role?: string;
 };
 
 type OrderItem = {
@@ -210,6 +225,23 @@ function getOrderPrepMinutes(orderItems: ApiOrderItem[] | undefined, fallbackPer
   return Array.from(uniqueDishPrep.values()).reduce((sum, minutes) => sum + minutes, 0);
 }
 
+function mapOrderStatusToTableStatus(orderStatus: OrderStatus | string): TableStatus {
+  switch (orderStatus) {
+    case 'placed':
+      return 'Order Taken';
+    case 'preparing':
+      return 'Dish Ready';
+    case 'served':
+      return 'Served';
+    case 'completed':
+      return 'Needs Bill';
+    case 'cancelled':
+      return 'Order Taken';
+    default:
+      return 'Order Taken';
+  }
+}
+
 function StatusBadge({ label, className }: { label: string; className: string }) {
   return (
     <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${className}`}>
@@ -313,109 +345,168 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const [billingError, setBillingError] = useState<string | null>(null);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
 
-  // Map order status to table status for UI
-  const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
-    switch (orderStatus) {
-      case 'placed':
-        return 'Order Taken';
-      case 'preparing':
-        return 'Dish Ready';
-      case 'served':
-        return 'Served';
-      case 'completed':
-        return 'Needs Bill';
-      case 'cancelled':
-        return 'Order Taken';
-      default:
-        return 'Order Taken';
+  // Realtime connection status for indicator dot
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("CONNECTING");
+
+  const mapTableRecordToManagerTable = useCallback((table: RestaurantTableRecord, ordersList: ApiOrder[]) => {
+    const activeStatuses = new Set(['placed', 'preparing', 'served']);
+    const unpaidStatuses = new Set(['', 'pending', 'unpaid', 'partial']);
+    const tableOrder = ordersList
+      .filter((order) => {
+        const normalizedStatus = String(order.status ?? '').toLowerCase();
+        const normalizedPaymentStatus = String(order.payment_status ?? '').toLowerCase();
+        return order.table_id === table.id && activeStatuses.has(normalizedStatus) && unpaidStatuses.has(normalizedPaymentStatus);
+      })
+      .sort((left, right) => {
+        const leftTime = left.order_time ? new Date(left.order_time).getTime() : 0;
+        const rightTime = right.order_time ? new Date(right.order_time).getTime() : 0;
+        return rightTime - leftTime;
+      })[0];
+
+    const orderItems = tableOrder?.order_items && Array.isArray(tableOrder.order_items)
+      ? tableOrder.order_items
+      : [];
+
+    return {
+      id: table.id,
+      tableNumber: String(table.table_number).padStart(2, '0'),
+      waiterId: tableOrder?.taken_by || 'unassigned',
+      status: tableOrder ? mapOrderStatusToTableStatus(tableOrder.status) : 'Unoccupied',
+      guests: tableOrder?.num_people || 1,
+      runningTotal: tableOrder ? Number(tableOrder.total_amount ?? 0) : 0,
+      elapsedMinutes: getOrderPrepMinutes(orderItems),
+      orderItems: orderItems.map((item: ApiOrderItem, idx: number) => ({
+        id: `${tableOrder?.id ?? table.id}-item-${idx}`,
+        name: item.dishes?.name || 'Unknown',
+        quantity: item.quantity || 1,
+        price: Number(item.price ?? 0),
+      })),
+    } as ManagerTable;
+  }, []);
+
+  const refreshTablesAndOrders = useCallback(async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
+    try {
+      if (showLoading) {
+        setIsLoadingTables(true);
+      }
+      setTablesError(null);
+
+      // Fetch both tables and orders in parallel
+      const [tablesRes, ordersRes] = await Promise.all([
+        fetch('/api/tables'),
+        fetch('/api/orders')
+      ]);
+
+      if (!tablesRes.ok || !ordersRes.ok) {
+        throw new Error(`Failed to fetch data: tables(${tablesRes.status}), orders(${ordersRes.status})`);
+      }
+
+      const tablesData = await tablesRes.json();
+      const ordersData = await ordersRes.json();
+
+      // Extract arrays from responses
+      const tablesList: RestaurantTableRecord[] = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
+      const ordersList: ApiOrder[] = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+      setTrendData(buildTodayOrdersTrend(ordersList));
+
+      const transformedTables = tablesList.map((table) => mapTableRecordToManagerTable(table, ordersList));
+
+      setTables(transformedTables);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching data';
+      setTablesError(errorMessage);
+      console.error('Failed to fetch tables and orders:', error);
+    } finally {
+      if (showLoading) {
+        setIsLoadingTables(false);
+      }
     }
-  };
+  }, [mapTableRecordToManagerTable]);
+
+  const refreshSingleTableFromApi = useCallback(async (tableId: string) => {
+    const [tableResponse, orderResponse] = await Promise.all([
+      fetch(`/api/tables/${tableId}`),
+      fetch(`/api/orders?table_id=${tableId}`),
+    ]);
+
+    if (tableResponse.status === 404) {
+      setTables((previous) => previous.filter((table) => table.id !== tableId));
+      return;
+    }
+
+    if (!tableResponse.ok || !orderResponse.ok) {
+      throw new Error(`Failed to refresh table ${tableId}: table(${tableResponse.status}), orders(${orderResponse.status})`);
+    }
+
+    const tablePayload = await tableResponse.json();
+    const ordersPayload = await orderResponse.json();
+    const tableRecord = (Array.isArray(tablePayload) ? tablePayload[0] : tablePayload) as RestaurantTableRecord | undefined;
+    const ordersForTable = (Array.isArray(ordersPayload) ? ordersPayload : ordersPayload?.data || []) as ApiOrder[];
+
+    if (!tableRecord?.id) {
+      setTables((previous) => previous.filter((table) => table.id !== tableId));
+      return;
+    }
+
+    const nextTable = mapTableRecordToManagerTable(tableRecord, ordersForTable);
+    setTables((previous) => {
+      const index = previous.findIndex((table) => table.id === tableId);
+      if (index === -1) {
+        return [...previous, nextTable];
+      }
+
+      const updated = [...previous];
+      updated[index] = nextTable;
+      return updated;
+    });
+  }, [mapTableRecordToManagerTable]);
+
+  const handleRealtimeTableChange = useCallback(async (payload: TableOpsRealtimePayload) => {
+    const affectedTableIds = extractAffectedTableIds(payload);
+
+    if (payload.table === 'restaurant_tables' && payload.eventType === 'DELETE') {
+      setTables((previous) => previous.filter((table) => !affectedTableIds.includes(table.id)));
+      return;
+    }
+
+    if (affectedTableIds.length === 0) {
+      await refreshTablesAndOrders({ showLoading: false });
+      return;
+    }
+
+    await Promise.all(affectedTableIds.map((tableId) => refreshSingleTableFromApi(tableId)));
+  }, [refreshSingleTableFromApi, refreshTablesAndOrders]);
 
   // Fetch tables and orders from API
   useEffect(() => {
-    const fetchTablesAndOrders = async () => {
-      try {
-        setIsLoadingTables(true);
-        setTablesError(null);
-        
-        // Fetch both tables and orders in parallel
-        const [tablesRes, ordersRes] = await Promise.all([
-          fetch('/api/tables'),
-          fetch('/api/orders')
-        ]);
-        
-        if (!tablesRes.ok || !ordersRes.ok) {
-          throw new Error(`Failed to fetch data: tables(${tablesRes.status}), orders(${ordersRes.status})`);
-        }
-        
-        const tablesData = await tablesRes.json();
-        const ordersData = await ordersRes.json();
-        
-        // Extract arrays from responses
-        const tablesList = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
-        const ordersList: ApiOrder[] = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
-        setTrendData(buildTodayOrdersTrend(ordersList));
-        
-        // Create a map of orders by table_id for quick lookup
-        const activeStatuses = new Set(['placed', 'preparing', 'served']);
-        const unpaidStatuses = new Set(['', 'pending', 'unpaid', 'partial']);
-        const sortedActiveOrders = ordersList
-          .filter((order) => {
-            const normalizedStatus = String(order.status ?? '').toLowerCase();
-            const normalizedPaymentStatus = String(order.payment_status ?? '').toLowerCase();
-            return Boolean(order.table_id) && activeStatuses.has(normalizedStatus) && unpaidStatuses.has(normalizedPaymentStatus);
-          })
-          .sort((left, right) => {
-            const leftTime = left.order_time ? new Date(left.order_time).getTime() : 0;
-            const rightTime = right.order_time ? new Date(right.order_time).getTime() : 0;
-            return rightTime - leftTime;
-          });
+    void refreshTablesAndOrders();
+  }, [refreshTablesAndOrders]);
 
-        const ordersByTableId: Record<string, ApiOrder> = {};
-        sortedActiveOrders.forEach((order) => {
-          if (order.table_id && !ordersByTableId[order.table_id]) {
-            ordersByTableId[order.table_id] = order;
-          }
-        });
-        
-        // Transform tables to ManagerTable format, including order data if available
-        const transformedTables = tablesList
-          .map((table: any) => {
-            const order = ordersByTableId[table.id];
-            const orderItems = order?.order_items && Array.isArray(order.order_items)
-              ? order.order_items
-              : [];
-            // Same dish quantities should not multiply prep time; only unique dishes add up.
-            const elapsedMinutes = getOrderPrepMinutes(orderItems);
-            return {
-              id: table.id,
-              tableNumber: String(table.table_number).padStart(2, '0'),
-              waiterId: order?.taken_by || 'unassigned',
-              status: order ? mapOrderStatusToTableStatus(order.status) : 'Unoccupied',
-              guests: order?.num_people || 1,
-              runningTotal: order ? Number(order.total_amount ?? 0) : 0,
-              elapsedMinutes,
-              orderItems: orderItems.map((item: ApiOrderItem, idx: number) => ({
-                id: `${order?.id ?? table.id}-item-${idx}`,
-                name: item.dishes?.name || 'Unknown',
-                quantity: item.quantity || 1,
-                price: Number(item.price ?? 0),
-              })),
-            } as ManagerTable;
-          });
-        
-        setTables(transformedTables);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching data';
-        setTablesError(errorMessage);
-        console.error('Failed to fetch tables and orders:', error);
-      } finally {
-        setIsLoadingTables(false);
-      }
+  useEffect(() => {
+    if (!user?.restaurant_id) {
+      return;
+    }
+
+
+    setRealtimeStatus("CONNECTING");
+    const unsubscribe = subscribeToTableOperationsRealtime({
+      restaurantId: user.restaurant_id,
+      onChange: (payload) => {
+        void handleRealtimeTableChange(payload);
+      },
+      onStatusChange: (status) => {
+        setRealtimeStatus(status);
+      },
+      onError: (error) => {
+        setRealtimeStatus("CHANNEL_ERROR");
+        console.error('Realtime table sync failed:', error);
+      },
+    });
+
+    return () => {
+      unsubscribe();
     };
-    
-    fetchTablesAndOrders();
-  }, []);
+  }, [handleRealtimeTableChange, user?.restaurant_id]);
 
   // Fetch staff from API
   useEffect(() => {
@@ -431,10 +522,10 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
         }
         
         const staffData = await staffRes.json();
-        const staffList = Array.isArray(staffData) ? staffData : staffData.data || [];
+        const staffList: StaffApiRecord[] = Array.isArray(staffData) ? staffData : staffData.data || [];
         
         // Transform staff records to ManagerDashboard StaffMember format
-        const transformedStaff = staffList.map((staffRecord: any) => ({
+        const transformedStaff = staffList.map((staffRecord) => ({
           id: staffRecord.id,
           name: staffRecord.name,
           status: "On Floor" as StaffStatus, // Default status - can be enhanced with role-based logic
@@ -672,17 +763,61 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
               </p>
             </div>
 
+
             <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1 xl:w-auto xl:flex-nowrap">
-              <motion.button
-                type="button"
-                onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-                className="flex h-12 w-12 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
-              >
-                {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-              </motion.button>
+              <div className="flex items-center gap-1">
+                {/* Realtime status square button */}
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-label={
+                    realtimeStatus === "SUBSCRIBED"
+                      ? "Live connection"
+                      : realtimeStatus === "TIMED_OUT" || realtimeStatus === "CLOSED"
+                      ? "Reconnecting"
+                      : realtimeStatus === "CHANNEL_ERROR"
+                      ? "Connection error"
+                      : "Connecting"
+                  }
+                  title={
+                    realtimeStatus === "SUBSCRIBED"
+                      ? "Live connection"
+                      : realtimeStatus === "TIMED_OUT" || realtimeStatus === "CLOSED"
+                      ? "Reconnecting..."
+                      : realtimeStatus === "CHANNEL_ERROR"
+                      ? "Connection error"
+                      : "Connecting..."
+                  }
+                  className="flex h-12 w-12 items-center justify-center rounded-lg border border-border/80 bg-white transition-all"
+                  disabled
+                >
+                  <span
+                    className="block h-2.5 w-2.5 rounded-full"
+                    style={{
+                      backgroundColor:
+                        realtimeStatus === "SUBSCRIBED"
+                          ? "#22c55e" // green
+                        : realtimeStatus === "SUBSCRIBING" || realtimeStatus === "JOINING" || realtimeStatus === "CONNECTING"
+                          ? "#a3a3a3" // gray (connecting)
+                        : realtimeStatus === "TIMED_OUT" || realtimeStatus === "CLOSED" || realtimeStatus === "UNSUBSCRIBED" || realtimeStatus === "LEAVING" || realtimeStatus === "LEFT"
+                          ? "#facc15" // yellow (disconnected/reconnecting)
+                        : realtimeStatus === "CHANNEL_ERROR"
+                          ? "#ef4444" // red
+                        : "#a3a3a3", // fallback gray
+                    }}
+                  />
+                </button>
+                <motion.button
+                  type="button"
+                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                  className="flex h-12 w-12 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground transition-all hover:bg-secondary dark:hover:bg-secondary/50"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+                >
+                  {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                </motion.button>
+              </div>
 
               <motion.button
                 type="button"

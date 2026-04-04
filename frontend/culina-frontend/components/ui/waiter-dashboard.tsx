@@ -6,6 +6,7 @@ import { X, LogOut, Plus, ChevronRight, Moon, Sun, Clock, Receipt, ChefHat, Chec
 import { useTheme } from "@/app/theme-provider";
 import { AdaptiveSlider } from "@/components/ui/adaptive-slider";
 import { useAuth } from "@/hooks/use-auth";
+import { extractAffectedTableIds, subscribeToTableOperationsRealtime, type TableOpsRealtimePayload } from "@/utils/supabase/table-operations-realtime";
 
 type TableStatus = "Seated" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 
@@ -44,6 +45,24 @@ type DraftOrderItem = {
 type RestaurantTable = {
   id: string;
   table_number: number;
+};
+
+type ApiOrderItem = {
+  quantity?: number;
+  price?: number;
+  dishes?: {
+    name?: string;
+  };
+};
+
+type ApiOrder = {
+  id: string;
+  table_id?: string;
+  status: string;
+  order_time?: string;
+  num_people?: number;
+  total_amount?: number;
+  order_items?: ApiOrderItem[];
 };
 
 type ShiftRecord = {
@@ -344,6 +363,34 @@ export function WaiterDashboard({
   const [allTables, setAllTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
+  const mapTableRecordToActiveTable = useCallback((table: RestaurantTable, ordersList: ApiOrder[]) => {
+    const latestActiveOrder = ordersList
+      .filter((order) => order.table_id === table.id && order.status !== 'completed' && order.status !== 'cancelled')
+      .sort((left, right) => {
+        const leftTime = left.order_time ? new Date(left.order_time).getTime() : 0;
+        const rightTime = right.order_time ? new Date(right.order_time).getTime() : 0;
+        return rightTime - leftTime;
+      })[0];
+
+    return {
+      id: table.id,
+      tableNumber: String(table.table_number).padStart(2, '0'),
+      status: latestActiveOrder ? mapOrderStatusToTableStatus(latestActiveOrder.status) : 'Seated',
+      orderId: latestActiveOrder?.id ?? null,
+      orderStatus: (latestActiveOrder?.status as OrderStatus) ?? null,
+      guests: latestActiveOrder?.num_people || 1,
+      runningTotal: Number(latestActiveOrder?.total_amount ?? 0),
+      orderItems: latestActiveOrder?.order_items && Array.isArray(latestActiveOrder.order_items)
+        ? latestActiveOrder.order_items.map((item, idx) => ({
+            id: `${latestActiveOrder.id}-item-${idx}`,
+            name: item.dishes?.name || 'Unknown',
+            quantity: item.quantity || 1,
+            price: Number(item.price) || 0,
+          }))
+        : [],
+    } as ActiveTable;
+  }, []);
+
   const displayedShiftHours = useMemo(() => {
     if (!isShiftActive) {
       return [0, 0, 0];
@@ -418,9 +465,11 @@ export function WaiterDashboard({
     }
   }, [activeShift?.id, isShiftActive, isShiftProcessing, refreshActiveShift]);
 
-  const refreshTablesAndOrders = useCallback(async () => {
+  const refreshTablesAndOrders = useCallback(async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
     try {
-      setIsLoadingOrders(true);
+      if (showLoading) {
+        setIsLoadingOrders(true);
+      }
       setOrdersError(null);
 
       const [tablesRes, ordersRes] = await Promise.all([
@@ -436,7 +485,7 @@ export function WaiterDashboard({
       const ordersData = await ordersRes.json();
 
       const tablesList = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
-      const ordersList = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+      const ordersList: ApiOrder[] = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
 
       setAllTables(
         tablesList.map((table: { id: string; table_number: number }) => ({
@@ -445,45 +494,9 @@ export function WaiterDashboard({
         }))
       );
 
-      const ordersByTableId: Record<string, { id: string; status: string; num_people: number; total_amount: number; order_items?: Array<{ quantity: number; price: number; dishes?: { name?: string } }> }> = {};
-      ordersList.forEach((order: { id: string; table_id?: string; status: string; num_people?: number; total_amount?: number; order_items?: Array<{ quantity: number; price: number; dishes?: { name?: string } }> }) => {
-        if (!order.table_id) {
-          return;
-        }
-
-        if (order.status === 'completed' || order.status === 'cancelled') {
-          return;
-        }
-
-        ordersByTableId[order.table_id] = {
-          id: order.id,
-          status: order.status,
-          num_people: order.num_people ?? 1,
-          total_amount: Number(order.total_amount ?? 0),
-          order_items: order.order_items
-        };
-      });
-
       const transformedTables: ActiveTable[] = tablesList
         .map((table: { id: string; table_number: number }) => {
-          const order = ordersByTableId[table.id];
-          return {
-            id: table.id,
-            tableNumber: String(table.table_number).padStart(2, '0'),
-            status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
-            orderId: order?.id ?? null,
-            orderStatus: (order?.status as OrderStatus) ?? null,
-            guests: order?.num_people || 1,
-            runningTotal: order?.total_amount || 0,
-            orderItems: order?.order_items && Array.isArray(order.order_items)
-              ? order.order_items.map((item, idx) => ({
-                  id: `${order.id}-item-${idx}`,
-                  name: item.dishes?.name || 'Unknown',
-                  quantity: item.quantity || 1,
-                  price: Number(item.price) || 0,
-                }))
-              : [],
-          };
+          return mapTableRecordToActiveTable(table, ordersList);
         })
         .filter((table: ActiveTable) => table.status !== 'Seated' || table.orderItems.length > 0);
 
@@ -493,13 +506,113 @@ export function WaiterDashboard({
       setOrdersError(errorMessage);
       console.error('Failed to fetch tables and orders:', error);
     } finally {
-      setIsLoadingOrders(false);
+      if (showLoading) {
+        setIsLoadingOrders(false);
+      }
     }
-  }, []);
+  }, [mapTableRecordToActiveTable]);
+
+  const refreshSingleTableFromApi = useCallback(async (tableId: string) => {
+    const [tableResponse, ordersResponse] = await Promise.all([
+      fetch(`/api/tables/${tableId}`),
+      fetch(`/api/orders?table_id=${tableId}`),
+    ]);
+
+    if (tableResponse.status === 404) {
+      setAllTables((previous) => previous.filter((table) => table.id !== tableId));
+      setTables((previous) => previous.filter((table) => table.id !== tableId));
+      return;
+    }
+
+    if (!tableResponse.ok || !ordersResponse.ok) {
+      throw new Error(`Failed to refresh table ${tableId}: table(${tableResponse.status}), orders(${ordersResponse.status})`);
+    }
+
+    const tablePayload = await tableResponse.json();
+    const ordersPayload = await ordersResponse.json();
+    const tableRecord = (Array.isArray(tablePayload) ? tablePayload[0] : tablePayload) as RestaurantTable | undefined;
+    const ordersList = (Array.isArray(ordersPayload) ? ordersPayload : ordersPayload?.data || []) as ApiOrder[];
+
+    if (!tableRecord?.id) {
+      setAllTables((previous) => previous.filter((table) => table.id !== tableId));
+      setTables((previous) => previous.filter((table) => table.id !== tableId));
+      return;
+    }
+
+    const nextTable = mapTableRecordToActiveTable(tableRecord, ordersList);
+
+    setAllTables((previous) => {
+      const index = previous.findIndex((table) => table.id === tableRecord.id);
+      if (index === -1) {
+        return [...previous, tableRecord];
+      }
+
+      const updated = [...previous];
+      updated[index] = tableRecord;
+      return updated;
+    });
+
+    setTables((previous) => {
+      const shouldKeep = nextTable.status !== 'Seated' || nextTable.orderItems.length > 0;
+      const existingIndex = previous.findIndex((table) => table.id === tableRecord.id);
+
+      if (!shouldKeep) {
+        if (existingIndex === -1) {
+          return previous;
+        }
+        return previous.filter((table) => table.id !== tableRecord.id);
+      }
+
+      if (existingIndex === -1) {
+        return [...previous, nextTable];
+      }
+
+      const updated = [...previous];
+      updated[existingIndex] = nextTable;
+      return updated;
+    });
+  }, [mapTableRecordToActiveTable]);
+
+  const handleRealtimeTableChange = useCallback(async (payload: TableOpsRealtimePayload) => {
+    const affectedTableIds = extractAffectedTableIds(payload);
+
+    if (payload.table === 'restaurant_tables' && payload.eventType === 'DELETE') {
+      setAllTables((previous) => previous.filter((table) => !affectedTableIds.includes(table.id)));
+      setTables((previous) => previous.filter((table) => !affectedTableIds.includes(table.id)));
+      return;
+    }
+
+    if (affectedTableIds.length === 0) {
+      await refreshTablesAndOrders({ showLoading: false });
+      return;
+    }
+
+    await Promise.all(affectedTableIds.map((tableId) => refreshSingleTableFromApi(tableId)));
+  }, [refreshSingleTableFromApi, refreshTablesAndOrders]);
 
   useEffect(() => {
     void refreshTablesAndOrders();
   }, [refreshTablesAndOrders]);
+
+  useEffect(() => {
+    if (!user?.restaurant_id) {
+      return;
+    }
+
+    const unsubscribe = subscribeToTableOperationsRealtime({
+      restaurantId: user.restaurant_id,
+      onChange: (payload) => {
+        void handleRealtimeTableChange(payload);
+      },
+      onError: (error) => {
+        console.error('Realtime table sync failed:', error);
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [handleRealtimeTableChange, user?.restaurant_id]);
 
   useEffect(() => {
     void refreshActiveShift();
