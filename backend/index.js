@@ -16,8 +16,9 @@ const PORT = process.env.PORT || 8080;
 
 app.use(express.json());
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY =
+	process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const MONTH_CLOSE_JOB_SECRET = process.env.MONTH_CLOSE_JOB_SECRET;
 const ENABLE_MONTH_CLOSE_AUTOMATION = process.env.ENABLE_MONTH_CLOSE_AUTOMATION !== "false";
 const MONTH_CLOSE_CHECK_INTERVAL_MS = Number(process.env.MONTH_CLOSE_CHECK_INTERVAL_MS || 1000 * 60 * 60);
@@ -77,7 +78,9 @@ async function writeState(nextState) {
 
 async function runMonthClose({ source = "scheduler", force = false } = {}) {
 	if (!supabase) {
-		throw new Error("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
+		throw new Error(
+			"Supabase is not configured. Set SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY."
+		);
 	}
 
 	if (isMonthCloseRunning) {
@@ -172,7 +175,9 @@ async function runScheduledMonthCloseTick() {
 
 async function runInventoryInsightsJob() {
 	if (!supabase) {
-		throw new Error("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
+		throw new Error(
+			"Supabase is not configured. Set SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY."
+		);
 	}
 
 	if (isInsightsJobRunning) {
