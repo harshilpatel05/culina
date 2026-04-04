@@ -98,19 +98,45 @@ def run_pipeline() -> None:
 
     employee["consistency"] = employee["consistency"].fillna(0.0)
 
-    employee["score_raw"] = (
-        0.5 * employee["avg_orders_per_hour"]
-        + 0.3 * (1.0 / (1.0 + employee["consistency"]))
-        + 0.2 * employee["attendance_days"]
+    # Convert raw metrics into bounded business scores (0-100) so one feature cannot dominate.
+    target_orders_per_hour = 6.0
+    target_total_orders = 220.0
+    target_attendance_days = 26.0
+
+    employee["throughput_score"] = np.clip(
+        (employee["avg_orders_per_hour"] / target_orders_per_hour) * 100.0,
+        0.0,
+        100.0,
+    )
+    employee["volume_score"] = np.clip(
+        (employee["total_orders"] / target_total_orders) * 100.0,
+        0.0,
+        100.0,
+    )
+    employee["attendance_score"] = np.clip(
+        (employee["attendance_days"] / target_attendance_days) * 100.0,
+        0.0,
+        100.0,
+    )
+    employee["consistency_score"] = np.clip(
+        (1.0 / (1.0 + employee["consistency"])) * 100.0,
+        0.0,
+        100.0,
     )
 
-    min_score = employee["score_raw"].min()
-    max_score = employee["score_raw"].max()
+    employee["score"] = (
+        0.45 * employee["throughput_score"]
+        + 0.30 * employee["volume_score"]
+        + 0.15 * employee["attendance_score"]
+        + 0.10 * employee["consistency_score"]
+    )
 
-    if np.isclose(max_score, min_score):
-        employee["score"] = 100.0
-    else:
-        employee["score"] = ((employee["score_raw"] - min_score) / (max_score - min_score)) * 100.0
+    # Hard guardrail: no completed orders should not appear as high performance.
+    employee["score"] = np.where(
+        employee["total_orders"] <= 0,
+        np.minimum(employee["score"], 35.0),
+        employee["score"],
+    )
 
     employee["score"] = employee["score"].clip(lower=0, upper=100).round(2)
     employee["avg_orders_per_hour"] = employee["avg_orders_per_hour"].round(4)

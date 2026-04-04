@@ -33,7 +33,57 @@ function isUsableInsightText(text: string): boolean {
   }
 
   // Ensure we have readable prose, not just symbols/placeholders.
-  return /[a-zA-Z]/.test(normalized)
+  if (!/[a-zA-Z]/.test(normalized)) {
+    return false
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean)
+  if (words.length < 8) {
+    return false
+  }
+
+  const hasTerminalPunctuation = /[.!?]$/.test(normalized)
+  const lastWord = (words[words.length - 1] || '').toLowerCase()
+  const danglingWords = new Set([
+    'a',
+    'an',
+    'the',
+    'and',
+    'or',
+    'to',
+    'of',
+    'for',
+    'with',
+    'at',
+    'in',
+    'on',
+    'by',
+    'from',
+    'good',
+    'better',
+    'best',
+  ])
+
+  if (!hasTerminalPunctuation || danglingWords.has(lastWord)) {
+    return false
+  }
+
+  return true
+}
+
+function isLikelyTruncated(text: string): boolean {
+  const normalized = normalizeInsightText(text)
+  if (!normalized) {
+    return true
+  }
+
+  if (normalized.length >= 40 && !/[.!?]$/.test(normalized)) {
+    return true
+  }
+
+  return /\b(and|or|but|so|because|while|if|when|with|without|to|for|of|in|on|at|by|from|than|that|which|who|whose|where|as)\s*$/i.test(
+    normalized
+  )
 }
 
 function parseNumber(rawValue: string | undefined): number | null {
@@ -231,7 +281,7 @@ async function generateGeminiInsightWithFallbacks(
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 220,
+      maxOutputTokens: 360,
     },
   })
 
@@ -443,11 +493,13 @@ export async function POST(request: Request) {
   }
 
   const insightText = normalizeInsightText(geminiResult.text || '')
+  const initialInsightComplete = isUsableInsightText(insightText) && !isLikelyTruncated(insightText)
 
-  if (!isUsableInsightText(insightText) || insightText.length < 60) {
+  if (!initialInsightComplete) {
     const expansionPrompt = [
       'Rewrite and expand this employee insight into one complete paragraph (90-150 words).',
       'Keep it practical, manager-friendly, and specific to the same employee context.',
+      'Ensure the paragraph is complete and ends with proper punctuation.',
       'Do not use bullets, markdown, or labels.',
       'Draft to improve:',
       insightText || '(empty)',
@@ -463,19 +515,11 @@ export async function POST(request: Request) {
     )
 
     const expandedText = normalizeInsightText(expandedResult.text || '')
-    if (expandedResult.ok && isUsableInsightText(expandedText)) {
+    const expandedInsightComplete =
+      expandedResult.ok && isUsableInsightText(expandedText) && !isLikelyTruncated(expandedText)
+    if (expandedInsightComplete) {
       return NextResponse.json({
         insightText: expandedText,
-        generatedAt: new Date().toISOString(),
-        rowCount: scopedRows.length,
-        employeeId: requestedEmployeeId || null,
-      })
-    }
-
-    // If expansion failed but the first response is short-yet-usable, prefer it over deterministic fallback.
-    if (isUsableInsightText(insightText)) {
-      return NextResponse.json({
-        insightText,
         generatedAt: new Date().toISOString(),
         rowCount: scopedRows.length,
         employeeId: requestedEmployeeId || null,
@@ -487,8 +531,6 @@ export async function POST(request: Request) {
       generatedAt: new Date().toISOString(),
       rowCount: scopedRows.length,
       employeeId: requestedEmployeeId || null,
-      usedFallback: true,
-      fallbackReason: 'Gemini returned incomplete insight text after retry expansion',
     })
   }
 
