@@ -140,8 +140,8 @@ function buildTodayOrdersTrend(orders: ApiOrder[]): TrendPoint[] {
 }
 
 const FILTERS: TableFilter[] = ["All", "Unoccupied", "Order Taken", "Dish Ready", "Served", "Needs Bill"];
-const DASHBOARD_SHELL = "rounded-2xl border border-slate-300/90 bg-card/55 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] backdrop-blur-sm dark:border-slate-500/80";
-const SOFT_INSET_CARD = "rounded-xl border border-border/80 bg-card/40";
+const DASHBOARD_SHELL = "rounded-2xl border border-slate-300/90 bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] dark:border-slate-500/80";
+const SOFT_INSET_CARD = "rounded-xl border border-border/80 bg-card";
 
 const statusColorMap: Record<TableStatus, string> = {
   Unoccupied: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-400/30 dark:bg-slate-500/20 dark:text-slate-200",
@@ -213,7 +213,7 @@ function StatusBadge({ label, className }: { label: string; className: string })
 
 function InfoStatCard({ label, value, accentClassName = "text-foreground" }: { label: string; value: string | number; accentClassName?: string }) {
   return (
-    <div className="rounded-lg border border-border/80 bg-card/50 px-3 py-2">
+    <div className="rounded-lg border border-border/80 bg-card px-3 py-2">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`mt-1 font-semibold ${accentClassName}`}>{value}</p>
     </div>
@@ -246,7 +246,7 @@ function MetricCard({
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
     >
       <div className="flex flex-col items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/65">
+        <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background">
           <Icon className="size-4.5 text-muted-foreground" />
         </div>
         <div>
@@ -674,7 +674,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   key={member.id}
                   type="button"
                   onClick={() => setOpenStaffId(member.id)}
-                  className="group rounded-xl border border-border/80 bg-card/40 p-4 text-left transition-all hover:border-accent/40 hover:bg-card/60"
+                  className="group rounded-xl border border-border/80 bg-card p-4 text-left transition-all hover:border-accent/40 hover:bg-card"
                   whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.99 }}
                 >
@@ -762,7 +762,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
                     selectedFilter === filter
                       ? "border-primary/20 bg-primary text-primary-foreground"
-                      : "border-border bg-background/70 text-foreground hover:bg-secondary"
+                      : "border-border bg-background text-foreground hover:bg-secondary"
                   }`}
                 >
                   {filter}
@@ -775,7 +775,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-border/50 bg-card/50 px-4 py-3"
+              className="rounded-lg border border-border/50 bg-card px-4 py-3"
             >
               <p className="text-sm text-muted-foreground font-medium">Loading tables and orders...</p>
             </motion.div>
@@ -795,7 +795,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-border/50 bg-card/50 px-4 py-3 text-center"
+              className="rounded-lg border border-border/50 bg-card px-4 py-3 text-center"
             >
               <p className="text-sm text-muted-foreground font-medium">No tables available</p>
             </motion.div>
@@ -810,11 +810,11 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   key={table.id}
                   type="button"
                   onClick={() => openTableDetails(table.id)}
-                  className="group relative overflow-hidden rounded-xl border border-border/80 bg-card/40 p-4 text-left transition-all hover:border-accent/40 hover:bg-card/60"
+                  className="group relative overflow-hidden rounded-xl border border-border/80 bg-card p-4 text-left transition-all hover:border-accent/40 hover:bg-card"
                   whileHover={{ y: -2 }}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-current bg-background/60 text-xl font-bold text-foreground">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-current bg-background text-xl font-bold text-foreground">
                       {table.tableNumber}
                     </div>
                     <StatusBadge label={table.status} className={statusColorMap[table.status]} />
@@ -854,7 +854,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.94, y: 24 }}
                 transition={{ type: "spring", damping: 24, stiffness: 280 }}
-                className="relative z-51 w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card/95 shadow-2xl"
+                className="relative z-51 w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
               >
                 <div className="flex items-start justify-between border-b border-border px-6 py-5">
                   <div>
@@ -872,36 +872,36 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 </div>
 
                 <div className="grid gap-4 p-6 sm:grid-cols-2">
-                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
                     <div className="mt-2">
                       <StatusBadge label={openTable.status} className={statusColorMap[openTable.status]} />
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Guests</p>
                     <p className="mt-2 text-lg font-semibold text-foreground">{openTable.guests}</p>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Running Total</p>
                     <p className="mt-2 text-lg font-semibold text-accent">{formatCurrency(openTable.runningTotal)}</p>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card/40 p-4">
+                  <div className="rounded-xl border border-border/80 bg-card p-4">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Elapsed</p>
                     <p className="mt-2 text-lg font-semibold text-foreground">{openTable.elapsedMinutes} min</p>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card/40 p-4 sm:col-span-2">
+                  <div className="rounded-xl border border-border/80 bg-card p-4 sm:col-span-2">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Order Items</p>
                     {openTable.orderItems.length === 0 ? (
                       <p className="mt-3 text-sm text-muted-foreground">No items added yet.</p>
                     ) : (
                       <div className="mt-3 space-y-2">
                         {openTable.orderItems.map((item) => (
-                          <div key={item.id} className="flex items-center justify-between rounded-md border border-border bg-card/50 px-3 py-2">
+                          <div key={item.id} className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2">
                             <div>
                               <p className="text-sm font-medium text-foreground">{item.name}</p>
                               <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
@@ -914,7 +914,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 border-t border-border bg-card/60 px-6 py-4">
+                <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-6 py-4">
                   <p className={`text-sm ${billingError ? 'text-destructive' : 'text-muted-foreground'}`}>
                     {billingError ?? 'Complete billing to close the payment step for this table.'}
                   </p>
@@ -948,7 +948,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.94, y: 24 }}
                 transition={{ type: "spring", damping: 24, stiffness: 280 }}
-                className="relative z-51 my-4 w-full max-w-6xl overflow-y-auto rounded-2xl border border-border bg-card/95 shadow-2xl sm:my-6 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]"
+                className="relative z-51 my-4 w-full max-w-6xl overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl sm:my-6 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]"
               >
                 <div className="flex items-start justify-between border-b border-border px-8 py-6">
                   <div>
@@ -976,25 +976,25 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Hours</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">{selectedStaff.hours.toFixed(1)}h</p>
                       </div>
-                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Tables</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">{selectedStaff.activeTables}</p>
                       </div>
-                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Revenue</p>
                         <p className="mt-2 text-lg font-semibold text-accent">{formatCurrency(selectedStaff.revenue)}</p>
                       </div>
-                      <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                      <div className="rounded-xl border border-border/80 bg-card p-5">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Tips</p>
                         <p className="mt-2 text-lg font-semibold text-foreground">{formatCurrency(selectedStaff.tips)}</p>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                    <div className="rounded-xl border border-border/80 bg-card p-5">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Assigned Tables</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {selectedStaff.tables.map((tableNumber) => (
@@ -1008,7 +1008,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                    <div className="rounded-xl border border-border/80 bg-card p-5">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Manager Note</p>
                       <p className="mt-3 text-sm leading-6 text-muted-foreground">
                         Strong pacing on high-value tables. Keep an eye on bill delays and reassign if patio wait time exceeds 10 minutes.
@@ -1016,7 +1016,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card/40 p-5">
+                  <div className="rounded-xl border border-border/80 bg-card p-5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <h4 className="text-xl font-semibold text-foreground">Active Service Snapshot</h4>

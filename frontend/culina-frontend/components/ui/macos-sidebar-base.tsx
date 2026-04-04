@@ -29,7 +29,7 @@ export function MacOSSidebar({
 
   return (
     <div
-      className={`theme-injected bg-white relative flex min-w-96 overflow-hidden rounded-lg p-0 ${className}`}
+      className={`relative flex min-w-96 overflow-hidden rounded-lg border border-border/70 bg-background text-foreground p-0 ${className}`}
     >
       <motion.div
         animate={{
@@ -52,11 +52,11 @@ export function MacOSSidebar({
             <button
               type="button"
               onClick={() => setIsOpen(!isOpen)}
-              className="inline-flex size-8 items-center justify-center rounded-md text-black transition-all hover:bg-black/10 hover:scale-105"
+              className="inline-flex size-8 items-center justify-center rounded-md text-foreground transition-all hover:bg-accent/20 hover:scale-105"
             >
               <HugeiconsIcon
                 icon={SidebarLeftIcon}
-                className="size-5 cursor-pointer text-black"
+                className="size-5 cursor-pointer text-foreground"
               />
             </button>
           </motion.div>

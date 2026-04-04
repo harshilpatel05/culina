@@ -60,8 +60,8 @@ const EMPTY_FORM: InventoryFormState = {
   reorderLevel: "0",
 };
 
-const PANEL_SHELL = "rounded-2xl border border-slate-300/90 bg-card/70 p-4 shadow-sm backdrop-blur-sm dark:border-slate-600/70";
-const SUBTLE_PANEL = "rounded-2xl border border-slate-300/80 bg-card/60 shadow-sm backdrop-blur-sm dark:border-slate-600/60";
+const PANEL_SHELL = "rounded-2xl border border-slate-300/90 bg-card p-4 shadow-sm dark:border-slate-600/70";
+const SUBTLE_PANEL = "rounded-2xl border border-slate-300/80 bg-card shadow-sm dark:border-slate-600/60";
 const FIELD_INPUT = "w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-sm outline-none ring-primary transition focus:border-primary/60 focus:ring-2";
 
 function formatQty(value: number | null, unit?: string | null) {
