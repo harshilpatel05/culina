@@ -52,12 +52,12 @@ def build_daily_inventory(snapshots, restocks):
 
     restock_daily = restocks.groupby(["ingredient_id", "date"])["restocked_qty"].sum()
     df = df.join(restock_daily)
-    df["restocked_qty"] = df["restocked_qty"].fillna(0)
+    df["restocked_qty"] = pd.to_numeric(df["restocked_qty"], errors="coerce").fillna(0.0)
 
     # Wastage
     wastage = snapshots.groupby(["ingredient_id", "date"])["wastage_qty"].sum()
     df = df.join(wastage)
-    df["wastage_qty"] = df["wastage_qty"].fillna(0)
+    df["wastage_qty"] = pd.to_numeric(df["wastage_qty"], errors="coerce").fillna(0.0)
 
     # Metadata
     meta = (
@@ -67,6 +67,11 @@ def build_daily_inventory(snapshots, restocks):
     )
 
     df = df.join(meta)
+
+    # Ensure numeric fields are typed correctly before downstream math.
+    for column in ["opening_stock", "closing_stock", "reorder_level"]:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
 
     # Fill missing opening from previous closing
     df = df.sort_index()
@@ -118,10 +123,18 @@ def build_features(df):
 # 4. TRAIN MODEL
 # =========================
 def train_model(df, feature_cols):
-    df = df.dropna(subset=feature_cols + ["consumption"])
+    train_df = df.dropna(subset=["consumption"]).copy()
+    usable_feature_cols = [col for col in feature_cols if col in train_df.columns]
 
-    X = df[feature_cols]
-    y = df["consumption"]
+    if len(usable_feature_cols) == 0:
+        return None, usable_feature_cols
+
+    train_df = train_df.dropna(subset=usable_feature_cols)
+    if train_df.empty:
+        return None, usable_feature_cols
+
+    X = train_df[usable_feature_cols]
+    y = train_df["consumption"]
 
     model = lgb.LGBMRegressor(
         n_estimators=500,
@@ -133,7 +146,7 @@ def train_model(df, feature_cols):
     )
 
     model.fit(X, y)
-    return model
+    return model, usable_feature_cols
 
 
 # =========================
@@ -147,9 +160,33 @@ def predict_latest(df, model, feature_cols):
         .copy()
     )
 
-    latest = latest.dropna(subset=feature_cols)
+    if latest.empty:
+        return latest
 
-    latest["predicted_consumption"] = model.predict(latest[feature_cols])
+    # Fallback prediction when model or complete features are unavailable.
+    fallback_cols = [col for col in ["mean_7", "mean_14", "lag_1", "consumption"] if col in latest.columns]
+    if fallback_cols:
+        latest["predicted_consumption"] = latest[fallback_cols].apply(
+            lambda row: np.nanmean(row.values.astype(float)), axis=1
+        )
+        latest["predicted_consumption"] = latest["predicted_consumption"].replace([np.inf, -np.inf], np.nan).fillna(0)
+    else:
+        latest["predicted_consumption"] = 0.0
+
+    if model is None or len(feature_cols) == 0:
+        return latest
+
+    available_feature_cols = [col for col in feature_cols if col in latest.columns]
+    if len(available_feature_cols) == 0:
+        return latest
+
+    model_ready_mask = latest[available_feature_cols].notna().all(axis=1)
+    if model_ready_mask.any():
+        latest.loc[model_ready_mask, "predicted_consumption"] = model.predict(
+            latest.loc[model_ready_mask, available_feature_cols]
+        )
+
+    latest["predicted_consumption"] = latest["predicted_consumption"].clip(lower=0)
 
     return latest
 
@@ -212,9 +249,23 @@ def run_pipeline():
         "ingredient_code"
     ]
 
-    model = train_model(df, feature_cols)
+    model, usable_feature_cols = train_model(df, feature_cols)
 
-    latest = predict_latest(df, model, feature_cols)
+    latest = predict_latest(df, model, usable_feature_cols)
+
+    if latest.empty:
+        output_cols = [
+            "ingredient_name",
+            "closing_stock",
+            "predicted_consumption",
+            "reorder_point",
+            "order_qty",
+            "need_restock"
+        ]
+        pd.DataFrame(columns=output_cols).to_csv("restock_recommendations.csv", index=False)
+        print("\n=== RESTOCK RECOMMENDATIONS ===")
+        print("No data available to produce recommendations.")
+        return
 
     results = compute_restock(latest)
 
