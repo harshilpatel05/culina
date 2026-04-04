@@ -33,10 +33,10 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { MacOSSidebar } from "@/components/ui/macos-sidebar-base";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
-import { extractAffectedTableIds, subscribeToTableOperationsRealtime, type TableOpsRealtimePayload } from "@/utils/supabase/table-operations-realtime";
-import type { ChannelStatus } from "@/utils/supabase/table-operations-realtime";
+import { extractAffectedTableIds, TableOpsRealtimePayload } from "@/utils/supabase/table-operations-realtime";
+import { connectWebSocket, onWebSocketMessage } from "@/utils/websocket-client";
 
-type RealtimeStatus = ChannelStatus | "CONNECTING";
+type RealtimeStatus = "CONNECTED" | "DISCONNECTED" | "CONNECTING";
 
 type TableStatus = "Unoccupied" | "Order Taken" | "Dish Ready" | "Served" | "Needs Bill";
 type OrderStatus = 'placed' | 'preparing' | 'served' | 'completed' | 'cancelled';
@@ -305,7 +305,7 @@ function MetricCard({
 
   return (
     <motion.div
-      className={`w-full rounded-2xl border px-5 py-5 text-center shadow-[0_8px_22px_rgba(30,64,175,0.18)] backdrop-blur sm:px-2 sm:py-3 xl:px-5 xl:py-5 ${toneMap[tone].surface} ${toneMap[tone].border}`}
+      className={`w-full rounded-2xl border px-5 py-5 text-center shadow-[0_8px_22px_rgba(30,64,175,0.18)] b      filter: ''ackdrop-blur sm:px-2 sm:py-3 xl:px-5 xl:py-5 ${toneMap[tone].surface} ${toneMap[tone].border}`}
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
     >
@@ -483,30 +483,18 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   }, [refreshTablesAndOrders]);
 
   useEffect(() => {
-    if (!user?.restaurant_id) {
-      return;
-    }
-
-
     setRealtimeStatus("CONNECTING");
-    const unsubscribe = subscribeToTableOperationsRealtime({
-      restaurantId: user.restaurant_id,
-      onChange: (payload) => {
-        void handleRealtimeTableChange(payload);
-      },
-      onStatusChange: (status) => {
-        setRealtimeStatus(status);
-      },
-      onError: (error) => {
-        setRealtimeStatus("CHANNEL_ERROR");
-        console.error('Realtime table sync failed:', error);
-      },
+    connectWebSocket("ws://localhost:8080");
+    onWebSocketMessage((msg) => {
+      if (msg && msg.type === "connected") {
+        setRealtimeStatus("CONNECTED");
+        return;
+      }
+      // Assume all other messages are table/order events
+      void refreshTablesAndOrders({ showLoading: false });
     });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [handleRealtimeTableChange, user?.restaurant_id]);
+    // No cleanup for demo/minimal client
+  }, [refreshTablesAndOrders]);
 
   // Fetch staff from API
   useEffect(() => {
@@ -771,21 +759,21 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                   type="button"
                   tabIndex={-1}
                   aria-label={
-                    realtimeStatus === "SUBSCRIBED"
+                    realtimeStatus === "CONNECTED"
                       ? "Live connection"
-                      : realtimeStatus === "TIMED_OUT" || realtimeStatus === "CLOSED"
-                      ? "Reconnecting"
-                      : realtimeStatus === "CHANNEL_ERROR"
-                      ? "Connection error"
+                      : realtimeStatus === "CONNECTING"
+                      ? "Connecting"
+                      : realtimeStatus === "DISCONNECTED"
+                      ? "Disconnected"
                       : "Connecting"
                   }
                   title={
-                    realtimeStatus === "SUBSCRIBED"
+                    realtimeStatus === "CONNECTED"
                       ? "Live connection"
-                      : realtimeStatus === "TIMED_OUT" || realtimeStatus === "CLOSED"
-                      ? "Reconnecting..."
-                      : realtimeStatus === "CHANNEL_ERROR"
-                      ? "Connection error"
+                      : realtimeStatus === "CONNECTING"
+                      ? "Connecting..."
+                      : realtimeStatus === "DISCONNECTED"
+                      ? "Disconnected"
                       : "Connecting..."
                   }
                   className="flex h-12 w-12 items-center justify-center rounded-lg border border-border/80 bg-white transition-all"
@@ -795,14 +783,12 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
                     className="block h-2.5 w-2.5 rounded-full"
                     style={{
                       backgroundColor:
-                        realtimeStatus === "SUBSCRIBED"
+                        realtimeStatus === "CONNECTED"
                           ? "#22c55e" // green
-                        : realtimeStatus === "SUBSCRIBING" || realtimeStatus === "JOINING" || realtimeStatus === "CONNECTING"
-                          ? "#a3a3a3" // gray (connecting)
-                        : realtimeStatus === "TIMED_OUT" || realtimeStatus === "CLOSED" || realtimeStatus === "UNSUBSCRIBED" || realtimeStatus === "LEAVING" || realtimeStatus === "LEFT"
-                          ? "#facc15" // yellow (disconnected/reconnecting)
-                        : realtimeStatus === "CHANNEL_ERROR"
-                          ? "#ef4444" // red
+                        : realtimeStatus === "CONNECTING"
+                          ? "#a3a3a3" // gray
+                        : realtimeStatus === "DISCONNECTED"
+                          ? "#facc15" // yellow
                         : "#a3a3a3", // fallback gray
                     }}
                   />

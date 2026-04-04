@@ -103,7 +103,7 @@ export function subscribeToTableOperationsRealtime({
           event,
           schema: "public",
           table,
-          filter: `restaurant_id=eq.${restaurantId}`,
+          filter: ``,
         },
         (payload) => {
           notifyWithDebounce(payload as RealtimePostgresChangesPayload<Record<string, unknown>>);
