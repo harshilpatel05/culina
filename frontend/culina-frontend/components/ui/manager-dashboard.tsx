@@ -232,26 +232,51 @@ function MetricCard({
   tone: "neutral" | "success" | "danger" | "info" | "accent";
 }) {
   const toneMap = {
-    neutral: "border-slate-200/70 bg-slate-50/80 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200",
-    success: "border-emerald-200/70 bg-emerald-50/70 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-    danger: "border-rose-200/70 bg-rose-50/70 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
-    info: "border-sky-200/70 bg-sky-50/70 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
-    accent: "border-indigo-200/70 bg-indigo-50/70 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300",
+    neutral: {
+      border: "border-slate-300/80 dark:border-slate-600/70",
+      surface: "bg-linear-to-br from-slate-200 via-slate-200 to-slate-300 dark:from-slate-900 dark:via-slate-800/90 dark:to-slate-700/90",
+      value: "text-slate-700 dark:text-slate-100",
+      icon: "text-slate-600 dark:text-slate-300",
+    },
+    success: {
+      border: "border-emerald-300/70 dark:border-emerald-500/40",
+      surface: "bg-linear-to-br from-emerald-100 via-emerald-200 to-teal-300 dark:from-emerald-950 dark:via-emerald-900/90 dark:to-teal-900/90",
+      value: "text-emerald-700 dark:text-emerald-300",
+      icon: "text-emerald-600 dark:text-emerald-300",
+    },
+    danger: {
+      border: "border-rose-300/70 dark:border-rose-500/40",
+      surface: "bg-linear-to-br from-rose-100 via-pink-200 to-rose-300 dark:from-rose-950 dark:via-rose-900/90 dark:to-pink-900/90",
+      value: "text-rose-700 dark:text-rose-300",
+      icon: "text-rose-600 dark:text-rose-300",
+    },
+    info: {
+      border: "border-sky-300/70 dark:border-sky-500/40",
+      surface: "bg-linear-to-br from-sky-100 via-sky-200 to-cyan-300 dark:from-sky-950 dark:via-sky-900/90 dark:to-cyan-900/90",
+      value: "text-sky-700 dark:text-sky-300",
+      icon: "text-sky-600 dark:text-sky-300",
+    },
+    accent: {
+      border: "border-indigo-300/70 dark:border-indigo-500/40",
+      surface: "bg-linear-to-br from-indigo-100 via-indigo-200 to-violet-300 dark:from-indigo-950 dark:via-indigo-900/90 dark:to-violet-900/90",
+      value: "text-indigo-700 dark:text-indigo-300",
+      icon: "text-indigo-600 dark:text-indigo-300",
+    },
   } as const;
 
   return (
     <motion.div
-      className={`mx-auto w-full max-w-55 rounded-2xl border px-5 py-5 text-center shadow-[0_2px_8px_rgba(15,23,42,0.08)] backdrop-blur-sm ${toneMap[tone]}`}
+      className={`mx-auto w-full max-w-64 rounded-2xl border px-6 py-6 text-center shadow-[0_8px_22px_rgba(30,64,175,0.18)] backdrop-blur sm:px-7 sm:py-7 ${toneMap[tone].surface} ${toneMap[tone].border}`}
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
     >
       <div className="flex flex-col items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background">
-          <Icon className="size-4.5 text-muted-foreground" />
+        <div className="flex size-11 items-center justify-center rounded-full border border-white/60 bg-white/70 dark:border-white/10 dark:bg-slate-900/60">
+          <Icon className={`size-5 ${toneMap[tone].icon}`} />
         </div>
         <div>
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="mt-1 text-3xl font-semibold leading-none">{value}</p>
+          <p className={`mt-1 text-4xl font-semibold leading-none ${toneMap[tone].value}`}>{value}</p>
         </div>
       </div>
     </motion.div>
