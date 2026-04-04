@@ -13,13 +13,16 @@ RUN npm ci --omit=dev
 
 # Install Python dependencies
 COPY requirements.txt ./
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Copy app source
 COPY . .
 
 ENV NODE_ENV=production
 ENV PYTHON_BIN=python3
+ENV PATH="/opt/venv/bin:${PATH}"
 
 EXPOSE 8080
 CMD ["node", "index.js"]
