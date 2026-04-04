@@ -114,7 +114,7 @@ export async function POST(
   if (orderData.table_id) {
     const { error: tableUpdateError } = await supabase
       .from('restaurant_tables')
-      .update({ status: 'unoccupied' })
+      .update({ status: 'available' })
       .eq('id', orderData.table_id)
       .eq('restaurant_id', payload.restaurant_id)
 

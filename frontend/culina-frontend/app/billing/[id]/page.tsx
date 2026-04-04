@@ -291,7 +291,7 @@ export default function BillingPage() {
 			}
 
 			setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
-			setSuccessMessage("Payment completed. Table is now unoccupied.");
+			setSuccessMessage("Payment completed. Table is now available.");
 		} catch (paymentErr) {
 			const message = paymentErr instanceof Error ? paymentErr.message : "Failed to complete payment.";
 			setError(message);

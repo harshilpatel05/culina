@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 
+const ALLOWED_TABLE_STATUSES = ['available', 'occupied'] as const
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -29,6 +31,11 @@ export async function PUT(
 ) {
   const { id } = await params
   const body = await request.json()
+
+  if (body.status !== undefined && !ALLOWED_TABLE_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Invalid table status' }, { status: 400 })
+  }
+
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
 
