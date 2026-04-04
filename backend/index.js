@@ -378,7 +378,7 @@ async function runEmployeePerformanceJob() {
 
 		const { data: completedOrdersData, error: completedOrdersError } = await supabase
 			.from("orders")
-			.select("taken_by, status, order_time, created_at")
+			.select("taken_by, status, order_time")
 			.eq("status", "completed");
 
 		if (completedOrdersError) {
@@ -397,7 +397,7 @@ async function runEmployeePerformanceJob() {
 						return count;
 					}
 
-					const orderTimestamp = order.order_time || order.created_at;
+					const orderTimestamp = order.order_time;
 					if (isOrderInsideShift(orderTimestamp, shift.start_time, shift.end_time)) {
 						return count + 1;
 					}
