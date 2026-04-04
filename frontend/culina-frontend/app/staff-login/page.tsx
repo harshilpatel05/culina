@@ -44,7 +44,7 @@ export default function StaffLoginPage() {
 		setIsManagerLoading(true)
 
 		const supabase = createClient()
-		const redirectTo = `${window.location.origin}/auth/callback?next=/manager-dash`
+		const redirectTo = `${window.location.origin}/manager-dash`
 
 		const { error } = await supabase.auth.signInWithOAuth({
 			provider: 'google',

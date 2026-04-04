@@ -10,7 +10,7 @@ interface JWTPayload {
   exp?: number
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production'
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRATION = '7d'
 
 const secret = new TextEncoder().encode(JWT_SECRET)
