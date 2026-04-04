@@ -90,6 +90,25 @@ function formatDate(value: string | null) {
   });
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function ManagerInventoryPage() {
   const router = useRouter();
   const [inventory, setInventory] = useState<InventoryRecord[]>([]);
@@ -99,6 +118,8 @@ export default function ManagerInventoryPage() {
   const [isCapturingSnapshot, setIsCapturingSnapshot] = useState(false);
   const [isDownloadingSnapshots, setIsDownloadingSnapshots] = useState(false);
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+  const [inventoryInsight, setInventoryInsight] = useState<string | null>(null);
+  const [insightGeneratedAt, setInsightGeneratedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -382,29 +403,26 @@ export default function ManagerInventoryPage() {
     try {
       setIsGeneratingInsights(true);
       setError(null);
+      setInventoryInsight(null);
+      setInsightGeneratedAt(null);
 
       const response = await fetch("/api/inventory/insights", {
         method: "POST",
       });
 
+      const responseBody = await response.json().catch(() => null);
+
       if (!response.ok) {
-        const responseBody = await response.json().catch(() => null);
         throw new Error(responseBody?.error ?? "Could not generate inventory insights.");
       }
 
-      const blob = await response.blob();
-      const contentDisposition = response.headers.get("content-disposition") ?? "";
-      const fileNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-      const fileName = fileNameMatch?.[1] ?? `inventory-insights-${new Date().toISOString().slice(0, 10)}.csv`;
+      const insightText = typeof responseBody?.insightText === "string" ? responseBody.insightText.trim() : "";
+      if (!insightText) {
+        throw new Error("Could not generate inventory insights.");
+      }
 
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      setInventoryInsight(insightText);
+      setInsightGeneratedAt(typeof responseBody?.generatedAt === "string" ? responseBody.generatedAt : new Date().toISOString());
     } catch (insightsErr) {
       const message = insightsErr instanceof Error ? insightsErr.message : "Failed to generate inventory insights.";
       setError(message);
@@ -544,6 +562,16 @@ export default function ManagerInventoryPage() {
                   </button>
                 </div>
               </div>
+
+              {inventoryInsight ? (
+                <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">AI Insight</p>
+                    <p className="text-[11px] text-muted-foreground">Generated: {formatDateTime(insightGeneratedAt)}</p>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-foreground/90">{inventoryInsight}</p>
+                </div>
+              ) : null}
 
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-150 border-collapse text-left text-sm">
