@@ -27,6 +27,82 @@ function redirectWithCookies(
 export async function middleware(request: NextRequest) {
   const supabaseResponse = await createClient(request);
   const pathname = request.nextUrl.pathname;
+  const method = request.method.toUpperCase();
+
+  const isApiRoute = pathname.startsWith("/api/");
+  const isStaffAuthRoute =
+    pathname === "/api/staff-auth" ||
+    pathname === "/api/staff-auth/verify" ||
+    pathname === "/api/staff-auth/logout";
+
+  const isMutatingMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+
+  const managerAdminWritePrefixes = [
+    "/api/users",
+    "/api/staff",
+    "/api/refunds",
+    "/api/restaurants",
+    "/api/restaurant",
+    "/api/menus",
+    "/api/recipes",
+    "/api/ingredients",
+    "/api/dishes",
+    "/api/inventory/snapshots",
+    "/api/inventory/snapshots/export",
+  ];
+
+  const managerAdminOrWaiterStaffWritePrefixes = [
+    "/api/orders",
+    "/api/customers",
+    "/api/tables",
+  ];
+
+  if (isApiRoute && !isStaffAuthRoute) {
+    const token = request.cookies.get("auth-token")?.value;
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const payload = await verifyJWT(token);
+
+    if (!payload) {
+      const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      response.cookies.set({
+        name: "auth-token",
+        value: "",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 0,
+        path: "/",
+      });
+      return response;
+    }
+
+    if (isMutatingMethod) {
+      const requiresManagerAdmin = managerAdminWritePrefixes.some((prefix) => pathname.startsWith(prefix));
+      if (requiresManagerAdmin && payload.role !== "manager" && payload.role !== "admin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const requiresOperationalRole = managerAdminOrWaiterStaffWritePrefixes.some((prefix) =>
+        pathname.startsWith(prefix)
+      );
+
+      if (
+        requiresOperationalRole &&
+        payload.role !== "staff" &&
+        payload.role !== "waiter" &&
+        payload.role !== "manager" &&
+        payload.role !== "admin"
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    return supabaseResponse;
+  }
 
   const isManagerDashboard = pathname.startsWith("/manager-dash");
   const isWaiterDashboard = pathname.startsWith("/waiter-dash");
