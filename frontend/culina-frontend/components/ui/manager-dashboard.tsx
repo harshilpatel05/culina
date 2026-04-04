@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import {
   Activity,
+  BarChart3,
   BookOpen,
   Boxes,
   Building2,
@@ -76,6 +77,7 @@ type ApiOrder = {
   table_id?: string;
   taken_by?: string;
   status: OrderStatus | string;
+  payment_status?: string;
   num_people?: number;
   total_amount?: number | string;
   order_time?: string;
@@ -91,7 +93,7 @@ type OrderItem = {
 
 type TrendPoint = {
   hour: string;
-  revenue: number;
+  orders: number;
   tables: number;
 };
 
@@ -99,15 +101,43 @@ type ManagerDashboardProps = {
   managerName?: string;
 };
 
-const TREND_DATA: TrendPoint[] = [
-  { hour: "12 PM", revenue: 8200, tables: 6 },
-  { hour: "1 PM", revenue: 11200, tables: 8 },
-  { hour: "2 PM", revenue: 13600, tables: 10 },
-  { hour: "3 PM", revenue: 9800, tables: 7 },
-  { hour: "4 PM", revenue: 7600, tables: 5 },
-  { hour: "5 PM", revenue: 12900, tables: 9 },
-  { hour: "6 PM", revenue: 16800, tables: 12 },
-];
+function buildTodayOrdersTrend(orders: ApiOrder[]): TrendPoint[] {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const hourlyOrders = new Array(24).fill(0);
+
+  orders.forEach((order) => {
+    if (!order.order_time) {
+      return;
+    }
+
+    const orderTime = new Date(order.order_time);
+    if (Number.isNaN(orderTime.getTime()) || orderTime < startOfDay || orderTime >= endOfDay) {
+      return;
+    }
+
+    const normalizedStatus = String(order.status ?? "").toLowerCase();
+    if (normalizedStatus === "cancelled") {
+      return;
+    }
+
+    hourlyOrders[orderTime.getHours()] += 1;
+  });
+
+  return hourlyOrders.slice(0, now.getHours() + 1).map((orders, hourIndex) => {
+    const hour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hourIndex).toLocaleTimeString("en-IN", {
+      hour: "numeric",
+      hour12: true,
+    });
+
+    return {
+      hour,
+      orders,
+      tables: 0,
+    };
+  });
+}
 
 const FILTERS: TableFilter[] = ["All", "Unoccupied", "Order Taken", "Dish Ready", "Served", "Needs Bill"];
 const DASHBOARD_SHELL = "rounded-2xl border border-slate-300/90 bg-card/55 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] backdrop-blur-sm dark:border-slate-500/80";
@@ -128,8 +158,8 @@ const staffStatusColorMap: Record<StaffStatus, string> = {
 };
 
 const chartConfig = {
-  revenue: {
-    label: "Revenue",
+  orders: {
+    label: "Orders",
     theme: {
       light: "var(--accent)",
       dark: "var(--primary)",
@@ -247,6 +277,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [isOpeningBilling, setIsOpeningBilling] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
 
   // Map order status to table status for UI
   const mapOrderStatusToTableStatus = (orderStatus: OrderStatus | string): TableStatus => {
@@ -289,11 +320,17 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
         // Extract arrays from responses
         const tablesList = Array.isArray(tablesData) ? tablesData : tablesData.data || [];
         const ordersList: ApiOrder[] = Array.isArray(ordersData) ? ordersData : ordersData.data || [];
+        setTrendData(buildTodayOrdersTrend(ordersList));
         
         // Create a map of orders by table_id for quick lookup
         const activeStatuses = new Set(['placed', 'preparing', 'served']);
+        const unpaidStatuses = new Set(['', 'pending', 'unpaid', 'partial']);
         const sortedActiveOrders = ordersList
-          .filter((order) => order.table_id && activeStatuses.has(order.status))
+          .filter((order) => {
+            const normalizedStatus = String(order.status ?? '').toLowerCase();
+            const normalizedPaymentStatus = String(order.payment_status ?? '').toLowerCase();
+            return Boolean(order.table_id) && activeStatuses.has(normalizedStatus) && unpaidStatuses.has(normalizedPaymentStatus);
+          })
           .sort((left, right) => {
             const leftTime = left.order_time ? new Date(left.order_time).getTime() : 0;
             const rightTime = right.order_time ? new Date(right.order_time).getTime() : 0;
@@ -507,6 +544,9 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
       case "Restaurant":
         router.push("/manager-dash/restaurant");
         break;
+      case "Sales":
+        router.push("/manager-dash/sales");
+        break;
       default:
         break;
     }
@@ -538,8 +578,10 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
             { label: "Inventory", icon: <Boxes className="size-4" /> },
             { label: "Recipe", icon: <BookOpen className="size-4" /> },
             { label: "Restaurant", icon: <Building2 className="size-4" /> },
+            { label: "Sales", icon: <BarChart3 className="size-4" /> },
           ]}
           defaultOpen={false}
+          initialSelectedIndex={0}
           onItemClick={handleSidebarNav}
           className="w-full max-w-384 p-1 sm:p-2 lg:p-4"
         >
@@ -661,29 +703,29 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
           <div className={`${DASHBOARD_SHELL} space-y-4`}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">Revenue Pace</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Mock hourly trend until API data is wired in.</p>
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">Order Pace</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Today&apos;s hourly order trend.</p>
               </div>
               <div className="text-sm text-muted-foreground">Today</div>
             </div>
 
             <ChartContainer config={chartConfig} className="h-65 w-full">
-              <AreaChart data={TREND_DATA} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
+              <AreaChart data={trendData} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="managerRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-revenue)" stopOpacity={0.45} />
-                    <stop offset="95%" stopColor="var(--color-revenue)" stopOpacity={0.05} />
+                  <linearGradient id="managerOrders" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--color-orders)" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="var(--color-orders)" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis dataKey="hour" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `₹${Number(value) / 1000}k`} />
+                <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Area
                   type="monotone"
-                  dataKey="revenue"
-                  stroke="var(--color-revenue)"
-                  fill="url(#managerRevenue)"
+                  dataKey="orders"
+                  stroke="var(--color-orders)"
+                  fill="url(#managerOrders)"
                   strokeWidth={2.5}
                 />
               </AreaChart>

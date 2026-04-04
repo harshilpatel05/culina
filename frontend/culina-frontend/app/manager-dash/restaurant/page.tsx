@@ -329,6 +329,7 @@ export default function ManagerRestaurantPage() {
           { label: "Restaurant", icon: <Building2 className="size-4" /> },
         ]}
         defaultOpen={false}
+        initialSelectedIndex={4}
         onItemClick={handleSidebarNav}
         className="w-full max-w-384 p-1 sm:p-2 lg:p-4"
       >

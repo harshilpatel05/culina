@@ -37,8 +37,7 @@ export async function PUT(
     .update({
       ingredient_id: body.ingredient_id,
       current_stock: body.current_stock,
-      reorder_level: body.reorder_level,
-      wastage_qty: body.wastage_qty
+      reorder_level: body.reorder_level
     })
     .eq('id', id)
     .select()

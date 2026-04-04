@@ -44,8 +44,7 @@ export async function POST(req: Request) {
     .insert({
       ingredient_id: body.ingredient_id,
       current_stock: body.current_stock || 0,
-      reorder_level: body.reorder_level || 0,
-      wastage_qty: body.wastage_qty || 0
+      reorder_level: body.reorder_level || 0
     })
     .select()
 

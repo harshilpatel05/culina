@@ -116,6 +116,7 @@ export default function BillingPage() {
 	const [form, setForm] = useState<FormState>(EMPTY_FORM);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
+	const [isCompletingPayment, setIsCompletingPayment] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -257,6 +258,48 @@ export default function BillingPage() {
 		}
 	};
 
+	const completePayment = async () => {
+		if (!orderId || !order) {
+			setError("Order details are not available.");
+			return;
+		}
+
+		if (String(order.payment_status ?? "").toLowerCase() === "paid") {
+			setSuccessMessage("Payment is already completed for this order.");
+			return;
+		}
+
+		try {
+			setIsCompletingPayment(true);
+			setError(null);
+			setSuccessMessage(null);
+
+			const response = await fetch(`/api/orders/${orderId}/payment`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					amount: totals.grandTotal,
+					method: "cash",
+				}),
+			});
+
+			if (!response.ok) {
+				const responseBody = await response.json().catch(() => null);
+				throw new Error(responseBody?.error ?? "Failed to complete payment.");
+			}
+
+			setOrder((prev) => (prev ? { ...prev, payment_status: "paid" } : prev));
+			setSuccessMessage("Payment completed. Table is now unoccupied.");
+		} catch (paymentErr) {
+			const message = paymentErr instanceof Error ? paymentErr.message : "Failed to complete payment.";
+			setError(message);
+		} finally {
+			setIsCompletingPayment(false);
+		}
+	};
+
 	if (authLoading) {
 		return <main className="min-h-screen bg-background" />;
 	}
@@ -295,6 +338,17 @@ export default function BillingPage() {
 						>
 							<Printer className="h-4 w-4" />
 							Print
+						</Button>
+						<Button
+							onClick={completePayment}
+							disabled={isCompletingPayment || isLoading || String(order?.payment_status ?? "").toLowerCase() === "paid"}
+							className="gap-1.5 border border-emerald-500/40 bg-linear-to-r from-emerald-600 to-teal-600 text-white shadow-[0_8px_24px_-12px_rgba(5,150,105,0.55)] hover:from-emerald-700 hover:to-teal-700"
+						>
+							{String(order?.payment_status ?? "").toLowerCase() === "paid"
+								? "Payment Completed"
+								: isCompletingPayment
+									? "Completing..."
+									: "Complete Payment"}
 						</Button>
 						<Button
 							onClick={saveInvoice}

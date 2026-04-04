@@ -13,6 +13,117 @@ const TRANSITION_RULES: Record<string, string[]> = {
   cancelled: []
 }
 
+async function deductInventoryForOrder(
+  supabase: ReturnType<typeof createClient>,
+  orderId: string
+) {
+  const { data: orderItems, error: orderItemsError } = await supabase
+    .from('order_items')
+    .select('dish_id, quantity')
+    .eq('order_id', orderId)
+
+  if (orderItemsError) {
+    throw new Error(orderItemsError.message)
+  }
+
+  if (!orderItems || orderItems.length === 0) {
+    return
+  }
+
+  const dishIds = Array.from(new Set(orderItems.map((item) => item.dish_id).filter(Boolean)))
+  if (dishIds.length === 0) {
+    return
+  }
+
+  const { data: recipes, error: recipesError } = await supabase
+    .from('recipes')
+    .select('dish_id, ingredient_id, quantity')
+    .in('dish_id', dishIds)
+
+  if (recipesError) {
+    throw new Error(recipesError.message)
+  }
+
+  if (!recipes || recipes.length === 0) {
+    return
+  }
+
+  const orderQtyByDish = new Map<string, number>()
+  orderItems.forEach((item) => {
+    if (!item.dish_id) {
+      return
+    }
+
+    const dishId = String(item.dish_id)
+    const qty = Math.max(0, Number(item.quantity) || 0)
+    orderQtyByDish.set(dishId, (orderQtyByDish.get(dishId) || 0) + qty)
+  })
+
+  const ingredientUsage = new Map<string, number>()
+  recipes.forEach((recipe) => {
+    if (!recipe.ingredient_id || !recipe.dish_id) {
+      return
+    }
+
+    const dishQty = orderQtyByDish.get(String(recipe.dish_id)) || 0
+    if (dishQty <= 0) {
+      return
+    }
+
+    const perDishQty = Math.max(0, Number(recipe.quantity) || 0)
+    const usage = perDishQty * dishQty
+    if (usage <= 0) {
+      return
+    }
+
+    const ingredientId = String(recipe.ingredient_id)
+    ingredientUsage.set(ingredientId, (ingredientUsage.get(ingredientId) || 0) + usage)
+  })
+
+  if (ingredientUsage.size === 0) {
+    return
+  }
+
+  const ingredientIds = Array.from(ingredientUsage.keys())
+
+  const { data: inventoryRows, error: inventoryError } = await supabase
+    .from('inventory')
+    .select('id, ingredient_id, current_stock')
+    .in('ingredient_id', ingredientIds)
+
+  if (inventoryError) {
+    throw new Error(inventoryError.message)
+  }
+
+  if (!inventoryRows || inventoryRows.length === 0) {
+    return
+  }
+
+  for (const row of inventoryRows) {
+    if (!row.ingredient_id) {
+      continue
+    }
+
+    const ingredientId = String(row.ingredient_id)
+    const usedQty = ingredientUsage.get(ingredientId)
+    if (!usedQty || usedQty <= 0) {
+      continue
+    }
+
+    const currentStock = Number(row.current_stock) || 0
+    const nextStock = Math.max(0, currentStock - usedQty)
+
+    const { error: updateError } = await supabase
+      .from('inventory')
+      .update({ current_stock: nextStock })
+      .eq('id', row.id)
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+  }
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -106,6 +217,16 @@ export async function POST(
       { error: `Cannot transition from ${existingOrder.status} to ${status}` },
       { status: 400 }
     )
+  }
+
+  // UI labels "Dish Ready" as `preparing`. Deduct recipe ingredient usage on that transition.
+  if (existingOrder.status === 'placed' && status === 'preparing') {
+    try {
+      await deductInventoryForOrder(supabase, id)
+    } catch (deductionError) {
+      const errorMessage = deductionError instanceof Error ? deductionError.message : 'Failed to deduct inventory'
+      return NextResponse.json({ error: errorMessage }, { status: 500 })
+    }
   }
 
   const { error: updateError } = await supabase

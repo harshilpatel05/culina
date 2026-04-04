@@ -24,7 +24,7 @@ export async function GET(
 
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
-    .select('id')
+    .select('id, table_id')
     .eq('id', id)
     .eq('restaurant_id', payload.restaurant_id)
     .maybeSingle()
@@ -76,7 +76,7 @@ export async function POST(
 
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
-    .select('id')
+    .select('id, table_id')
     .eq('id', id)
     .eq('restaurant_id', payload.restaurant_id)
     .maybeSingle()
@@ -104,11 +104,23 @@ export async function POST(
 
   const { error: updateError } = await supabase
     .from('orders')
-    .update({ payment_status: 'paid' })
+    .update({ payment_status: 'paid', status: 'completed' })
     .eq('id', id)
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  if (orderData.table_id) {
+    const { error: tableUpdateError } = await supabase
+      .from('restaurant_tables')
+      .update({ status: 'unoccupied' })
+      .eq('id', orderData.table_id)
+      .eq('restaurant_id', payload.restaurant_id)
+
+    if (tableUpdateError) {
+      return NextResponse.json({ error: tableUpdateError.message }, { status: 500 })
+    }
   }
 
   return NextResponse.json(data)

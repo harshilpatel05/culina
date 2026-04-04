@@ -15,6 +15,8 @@ type ActiveTable = {
   id: string;
   tableNumber: string;
   status: TableStatus;
+  orderId: string | null;
+  orderStatus: OrderStatus | null;
   guests: number;
   runningTotal: number;
   orderItems: OrderItem[];
@@ -92,6 +94,22 @@ const STATUS_URGENCY: Record<TableStatus, number> = {
   Served: 2,
   "Order Taken": 3,
   Seated: 4,
+};
+
+const ORDER_TRANSITION_RULES: Record<OrderStatus, OrderStatus[]> = {
+  placed: ['preparing', 'cancelled'],
+  preparing: ['served', 'cancelled'],
+  served: ['completed'],
+  completed: [],
+  cancelled: [],
+};
+
+const ORDER_STATUS_ACTION_LABELS: Record<OrderStatus, string> = {
+  placed: 'Mark Order Taken',
+  preparing: 'Mark Dish Ready',
+  served: 'Mark Served',
+  completed: 'Mark Completed',
+  cancelled: 'Cancel Order',
 };
 
 const statusIconMap: Record<TableStatus, ReactElement> = {
@@ -281,7 +299,9 @@ export function WaiterDashboard({
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [statusUpdateError, setStatusUpdateError] = useState<string | null>(null);
   const [allTables, setAllTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
@@ -338,6 +358,8 @@ export function WaiterDashboard({
             id: table.id,
             tableNumber: String(table.table_number).padStart(2, '0'),
             status: order ? mapOrderStatusToTableStatus(order.status) : 'Seated',
+            orderId: order?.id ?? null,
+            orderStatus: (order?.status as OrderStatus) ?? null,
             guests: order?.num_people || 1,
             runningTotal: order?.total_amount || 0,
             orderItems: order?.order_items && Array.isArray(order.order_items)
@@ -403,6 +425,14 @@ export function WaiterDashboard({
   }, [user?.restaurant_id]);
 
   const openTable = tables.find((table) => table.id === openTableId) ?? null;
+
+  const nextOrderStatuses = useMemo(() => {
+    if (!openTable?.orderStatus) {
+      return [];
+    }
+
+    return ORDER_TRANSITION_RULES[openTable.orderStatus] ?? [];
+  }, [openTable?.orderStatus]);
 
   const metrics = useMemo(() => {
     const readyCount = tables.filter((table) => table.status === "Dish Ready").length;
@@ -575,6 +605,38 @@ export function WaiterDashboard({
         error instanceof Error ? error.message : "Logout failed. Please try again.";
       setLogoutError(errorMessage);
       setIsLoggingOut(false);
+    }
+  };
+
+  const updateOrderStatus = async (nextStatus: OrderStatus) => {
+    if (!openTable?.orderId) {
+      setStatusUpdateError('No active order found for this table.');
+      return;
+    }
+
+    try {
+      setIsUpdatingOrderStatus(true);
+      setStatusUpdateError(null);
+
+      const response = await fetch(`/api/orders/${openTable.orderId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(errorPayload?.error || `Failed to update order status (${response.status})`);
+      }
+
+      await refreshTablesAndOrders();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update order status';
+      setStatusUpdateError(errorMessage);
+    } finally {
+      setIsUpdatingOrderStatus(false);
     }
   };
 
@@ -989,6 +1051,29 @@ export function WaiterDashboard({
                       </div>
 
                       <div className="space-y-3">
+                        <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Update Order Status</label>
+                        <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-background/40 p-3">
+                          {nextOrderStatuses.length === 0 && (
+                            <p className="text-sm text-muted-foreground">No further status transitions available.</p>
+                          )}
+
+                          {nextOrderStatuses.map((nextStatus) => (
+                            <motion.button
+                              key={nextStatus}
+                              type="button"
+                              onClick={() => void updateOrderStatus(nextStatus)}
+                              disabled={isUpdatingOrderStatus}
+                              whileHover={{ scale: 1.01 }}
+                              whileTap={{ scale: 0.98 }}
+                              className="rounded-md border border-primary/20 bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {ORDER_STATUS_ACTION_LABELS[nextStatus]}
+                            </motion.button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
                         <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Number of Guests</label>
                         <div className="w-full px-4 py-3 rounded-lg border border-border bg-background/50 text-foreground
                                         font-semibold text-lg">
@@ -1030,6 +1115,12 @@ export function WaiterDashboard({
                         </div>
                       </div>
                     </div>
+
+                    {statusUpdateError && (
+                      <div className="mx-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive md:mx-8">
+                        {statusUpdateError}
+                      </div>
+                    )}
 
                     {/* Footer */}
                     <div className="px-6 py-5 md:px-8 flex flex-col-reverse sm:flex-row items-center justify-between gap-4 bg-card/50 border-t border-border">
