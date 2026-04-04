@@ -161,8 +161,8 @@ const chartConfig = {
   orders: {
     label: "Orders",
     theme: {
-      light: "var(--accent)",
-      dark: "var(--primary)",
+      light: "#6366f1",
+      dark: "#818cf8",
     },
   },
   tables: {

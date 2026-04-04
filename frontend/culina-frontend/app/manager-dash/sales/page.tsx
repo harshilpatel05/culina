@@ -368,7 +368,7 @@ export default function ManagerSalesPage() {
                   className="absolute inset-0 bg-black/50"
                 />
 
-                <section className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-blue-200/60 bg-linear-to-b from-background to-blue-50/20 p-5 shadow-2xl dark:border-blue-500/25 dark:to-blue-500/5">
+                <section className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-blue-200 bg-background p-5 shadow-2xl dark:border-blue-500/35 dark:bg-slate-950">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3">
                     <div>
                       <h3 className="text-lg font-semibold text-foreground">Invoice Details: {selectedInvoice.invoice_number}</h3>
@@ -395,48 +395,48 @@ export default function ManagerSalesPage() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Order ID</p>
                       <p className="mt-1 font-medium text-foreground">{selectedInvoice.order_id ?? "-"}</p>
                     </div>
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Issued At</p>
                       <p className="mt-1 font-medium text-foreground">{formatDateTime(selectedInvoice.issued_at)}</p>
                     </div>
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Due At</p>
                       <p className="mt-1 font-medium text-foreground">{formatDateTime(selectedInvoice.due_at)}</p>
                     </div>
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Subtotal</p>
                       <p className="mt-1 font-medium text-foreground">{formatCurrency(toNumber(selectedInvoice.subtotal))}</p>
                     </div>
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Tax</p>
                       <p className="mt-1 font-medium text-foreground">
                         {toNumber(selectedInvoice.tax_percent).toFixed(2)}% ({formatCurrency(toNumber(selectedInvoice.tax_amount))})
                       </p>
                     </div>
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Service Charge</p>
                       <p className="mt-1 font-medium text-foreground">
                         {toNumber(selectedInvoice.service_charge_percent).toFixed(2)}% ({formatCurrency(toNumber(selectedInvoice.service_charge_amount))})
                       </p>
                     </div>
-                    <div className="rounded-lg border border-blue-200/60 bg-blue-50/60 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-500/35 dark:bg-blue-950">
                       <p className="text-xs text-muted-foreground">Discount</p>
                       <p className="mt-1 font-medium text-foreground">
                         {toNumber(selectedInvoice.discount_percent).toFixed(2)}% ({formatCurrency(toNumber(selectedInvoice.discount_amount))})
                       </p>
                     </div>
-                    <div className="rounded-lg border border-blue-300/70 bg-blue-100/70 p-3 sm:col-span-2 lg:col-span-1 dark:border-blue-500/35 dark:bg-blue-500/15">
+                    <div className="rounded-lg border border-blue-300 bg-blue-100 p-3 sm:col-span-2 lg:col-span-1 dark:border-blue-500/40 dark:bg-blue-900">
                       <p className="text-xs text-muted-foreground">Grand Total</p>
                       <p className="mt-1 text-base font-semibold text-foreground">{formatCurrency(toNumber(selectedInvoice.grand_total))}</p>
                     </div>
                   </div>
 
                   {selectedInvoice.notes ? (
-                    <div className="mt-3 rounded-lg border border-border/70 bg-card/60 p-3">
+                    <div className="mt-3 rounded-lg border border-border/70 bg-card p-3">
                       <p className="text-xs text-muted-foreground">Notes</p>
                       <p className="mt-1 text-sm text-foreground">{selectedInvoice.notes}</p>
                     </div>
