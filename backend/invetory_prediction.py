@@ -51,11 +51,13 @@ def build_daily_inventory(snapshots, restocks):
     restocks["date"] = restocks["restock_time"].dt.date
 
     restock_daily = restocks.groupby(["ingredient_id", "date"])["restocked_qty"].sum()
-    df = df.join(restock_daily).fillna(0)
+    df = df.join(restock_daily)
+    df["restocked_qty"] = df["restocked_qty"].fillna(0)
 
     # Wastage
     wastage = snapshots.groupby(["ingredient_id", "date"])["wastage_qty"].sum()
-    df = df.join(wastage).fillna(0)
+    df = df.join(wastage)
+    df["wastage_qty"] = df["wastage_qty"].fillna(0)
 
     # Metadata
     meta = (
