@@ -266,17 +266,17 @@ function MetricCard({
 
   return (
     <motion.div
-      className={`mx-auto w-full max-w-64 rounded-2xl border px-6 py-6 text-center shadow-[0_8px_22px_rgba(30,64,175,0.18)] backdrop-blur sm:px-7 sm:py-7 ${toneMap[tone].surface} ${toneMap[tone].border}`}
+      className={`w-full rounded-2xl border px-5 py-5 text-center shadow-[0_8px_22px_rgba(30,64,175,0.18)] backdrop-blur sm:px-2 sm:py-3 xl:px-5 xl:py-5 ${toneMap[tone].surface} ${toneMap[tone].border}`}
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
     >
-      <div className="flex flex-col items-center gap-2.5">
-        <div className="flex size-11 items-center justify-center rounded-full border border-white/60 bg-white/70 dark:border-white/10 dark:bg-slate-900/60">
-          <Icon className={`size-5 ${toneMap[tone].icon}`} />
+      <div className="flex flex-col items-center gap-2 sm:gap-1 xl:gap-2.5">
+        <div className="flex size-11 items-center justify-center rounded-full border border-white/60 bg-white/70 dark:border-white/10 dark:bg-slate-900/60 sm:size-8 xl:size-11">
+          <Icon className={`size-5 sm:size-3.5 xl:size-5 ${toneMap[tone].icon}`} />
         </div>
         <div>
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className={`mt-1 text-4xl font-semibold leading-none ${toneMap[tone].value}`}>{value}</p>
+          <p className="text-sm font-medium text-muted-foreground sm:text-[11px] xl:text-sm">{label}</p>
+          <p className={`mt-1 text-4xl font-semibold leading-none sm:text-2xl xl:text-4xl ${toneMap[tone].value}`}>{value}</p>
         </div>
       </div>
     </motion.div>
@@ -664,7 +664,7 @@ export function ManagerDashboard({ managerName }: ManagerDashboardProps) {
 
           </div>
 
-          <div className="grid grid-cols-1 justify-items-center gap-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 xl:gap-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-5 sm:gap-2">
             <MetricCard label="Active Tables" value={metrics.activeTables} icon={Activity} tone="neutral" />
             <MetricCard label="Dish Ready" value={metrics.readyCount} icon={Briefcase} tone="success" />
             <MetricCard label="Needs Bill" value={metrics.billCount} icon={Wallet} tone="danger" />
