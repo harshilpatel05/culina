@@ -22,10 +22,10 @@ export async function POST() {
   }
 
   const backendBaseUrl = (process.env.BACKEND_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '')
-  const secret = process.env.MONTH_CLOSE_JOB_SECRET?.trim()
+  const secret = (process.env.INVENTORY_INSIGHTS_JOB_SECRET || process.env.MONTH_CLOSE_JOB_SECRET || '').trim()
 
   if (!secret) {
-    return NextResponse.json({ error: 'Server misconfigured: MONTH_CLOSE_JOB_SECRET missing' }, { status: 500 })
+    return NextResponse.json({ error: 'Server misconfigured: INVENTORY_INSIGHTS_JOB_SECRET or MONTH_CLOSE_JOB_SECRET missing' }, { status: 500 })
   }
 
   const response = await fetch(`${backendBaseUrl}/jobs/inventory-insights/run`, {

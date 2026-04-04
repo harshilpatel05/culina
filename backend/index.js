@@ -265,11 +265,41 @@ async function runInventoryInsightsJob() {
 
 		await writeCsv(restocksCsvPath, ["ingredient_id", "restock_time", "restocked_qty"], restockRows);
 
-		await execFileAsync(PYTHON_BIN, [path.join(__dirname, "invetory_prediction.py")], {
-			cwd: __dirname,
-			maxBuffer: 1024 * 1024 * 10,
-			timeout: 5 * 60 * 1000,
-		});
+		const pythonCandidates = Array.from(
+			new Set([PYTHON_BIN, "python3", "python", "py"].filter(Boolean))
+		);
+
+		let pythonRunError = null;
+		for (const candidate of pythonCandidates) {
+			try {
+				await execFileAsync(candidate, [path.join(__dirname, "invetory_prediction.py")], {
+					cwd: __dirname,
+					maxBuffer: 1024 * 1024 * 10,
+					timeout: 5 * 60 * 1000,
+				});
+
+				pythonRunError = null;
+				break;
+			} catch (error) {
+				pythonRunError = error;
+				if (error && error.code !== "ENOENT") {
+					break;
+				}
+			}
+		}
+
+		if (pythonRunError) {
+			if (pythonRunError.code === "ENOENT") {
+				throw new Error(
+					`Python runtime not found. Tried: ${pythonCandidates.join(", ")}. Set PYTHON_BIN or install Python in deployment image.`
+				);
+			}
+
+			const stderrText =
+				typeof pythonRunError.stderr === "string" ? pythonRunError.stderr.trim() : "";
+			const message = stderrText || pythonRunError.message || "Python execution failed";
+			throw new Error(message);
+		}
 
 		const recommendationsCsv = await fs.readFile(recommendationsCsvPath, "utf8");
 		return recommendationsCsv;
@@ -311,7 +341,7 @@ app.post("/jobs/month-close/run", async (req, res) => {
 });
 
 app.post("/jobs/inventory-insights/run", async (req, res) => {
-	const expectedSecret = String(MONTH_CLOSE_JOB_SECRET || "").trim();
+	const expectedSecret = String(process.env.INVENTORY_INSIGHTS_JOB_SECRET || MONTH_CLOSE_JOB_SECRET || "").trim();
 	const headerSecret = String(req.headers["x-job-secret"] || "").trim();
 	const bearerHeader = String(req.headers.authorization || "");
 	const bearerSecret = bearerHeader.startsWith("Bearer ") ? bearerHeader.slice(7).trim() : "";
